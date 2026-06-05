@@ -8,3 +8,7 @@ DerivedData/
 build/
 *.xcworkspace/xcuserdata/
 .swiftpm/
+
+# Xcode user state
+YTBridge.xcodeproj/project.xcworkspace/xcuserdata/
+YTBridge.xcodeproj/xcuserdata/
