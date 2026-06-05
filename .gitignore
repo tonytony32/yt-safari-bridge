@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Xcode (added in Phase 1)
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+.swiftpm/
