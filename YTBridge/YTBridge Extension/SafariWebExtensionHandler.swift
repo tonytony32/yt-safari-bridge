@@ -2,41 +2,53 @@
 //  SafariWebExtensionHandler.swift
 //  YTBridge Extension
 //
-//  Created by  on 5/6/26.
+//  Receives `{type:"sync", state}` from the background relay, stores it in the
+//  StateStore, drains any queued commands back in the reply, and (once per process)
+//  starts the NWListener bind spike that keeps the local HTTP server alive.
+//
+//  Privacy: logs event type, payload size and timing only — never state content.
 //
 
 import SafariServices
-import os.log
+import os
 
 class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
+    private static let log = Logger(subsystem: "com.trypwood.ytbridge", category: "handler")
+
     func beginRequest(with context: NSExtensionContext) {
+        // Lazily prove (and hold) the listening socket on the first message.
+        BindSpike.runOnce()
+
         let request = context.inputItems.first as? NSExtensionItem
-
-        let profile: UUID?
-        if #available(iOS 17.0, macOS 14.0, *) {
-            profile = request?.userInfo?[SFExtensionProfileKey] as? UUID
-        } else {
-            profile = request?.userInfo?["profile"] as? UUID
-        }
-
         let message: Any?
-        if #available(iOS 15.0, macOS 11.0, *) {
+        if #available(macOS 11.0, *) {
             message = request?.userInfo?[SFExtensionMessageKey]
         } else {
             message = request?.userInfo?["message"]
         }
 
-        os_log(.default, "Received message from browser.runtime.sendNativeMessage: %@ (profile: %@)", String(describing: message), profile?.uuidString ?? "none")
+        var commands: [[String: Any]] = []
 
-        let response = NSExtensionItem()
-        if #available(iOS 15.0, macOS 11.0, *) {
-            response.userInfo = [ SFExtensionMessageKey: [ "echo": message ] ]
+        if let dict = message as? [String: Any],
+           dict["type"] as? String == "sync" {
+            let state = (dict["state"] as? [String: Any]) ?? ["active": false]
+            StateStore.shared.update(state: state)
+            commands = StateStore.shared.drainCommands()
+
+            let active = (state["active"] as? Bool) ?? false
+            Self.log.log("sync: active=\(active, privacy: .public) stateKeys=\(state.count, privacy: .public) cmdsOut=\(commands.count, privacy: .public)")
         } else {
-            response.userInfo = [ "message": [ "echo": message ] ]
+            Self.log.error("ignored non-sync message")
         }
 
-        context.completeRequest(returningItems: [ response ], completionHandler: nil)
+        let response = NSExtensionItem()
+        let payload: [String: Any] = ["commands": commands]
+        if #available(macOS 11.0, *) {
+            response.userInfo = [SFExtensionMessageKey: payload]
+        } else {
+            response.userInfo = ["message": payload]
+        }
+        context.completeRequest(returningItems: [response], completionHandler: nil)
     }
-
 }
