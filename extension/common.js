@@ -17,12 +17,14 @@
 
   // Hosts we trust to serve artwork. A hostile page could plant an arbitrary URL in
   // the DOM that the consumer would then fetch (tracking / local SSRF), so anything
-  // off this list is dropped to null.
-  const ARTWORK_HOSTS = new Set([
-    "i.ytimg.com",
-    "lh3.googleusercontent.com",
-    "music.youtube.com",
-  ]);
+  // off this list is dropped to null. Exact hosts plus any *.googleusercontent.com
+  // subdomain (yt3/yt4/lh3… all Google-owned image CDNs; YT Music album art comes
+  // from yt3.googleusercontent.com, video thumbs from i.ytimg.com).
+  const ARTWORK_HOSTS = new Set(["i.ytimg.com", "music.youtube.com"]);
+  const artworkHostOk = (h) =>
+    ARTWORK_HOSTS.has(h) ||
+    h === "googleusercontent.com" ||
+    h.endsWith(".googleusercontent.com");
 
   // Commands we will execute. Default-reject everything else.
   const COMMAND_ACTIONS = new Set([
@@ -50,7 +52,7 @@
     try {
       const u = new URL(url, location.href);
       if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-      return ARTWORK_HOSTS.has(u.hostname) ? u.href : null;
+      return artworkHostOk(u.hostname) ? u.href : null;
     } catch {
       return null;
     }
@@ -103,7 +105,7 @@
       durationSec: safe(video.duration),
       positionSec: safe(video.currentTime),
       videoId: meta.videoId || null,
-      url: location.href,
+      url: meta.url || location.href,
       artworkUrl: allowlistArtwork(meta.artworkUrl),
       volume: safe(video.volume),
     };

@@ -13,8 +13,16 @@
   const SELECTORS = {
     title: ".title.ytmusic-player-bar",
     byline: ".byline.ytmusic-player-bar",
-    // Prefer the dedicated song image; fall back to the player-bar thumbnail.
-    image: "#song-image img, img.ytmusic-player-bar, .image.ytmusic-player-bar img",
+    // Player-bar thumbnail. Tried in order; the first <img> with a YT thumbnail
+    // src wins. `ytmusic-player-bar img` catches it regardless of class drift.
+    image: [
+      "ytmusic-player-bar #song-image img",
+      "ytmusic-player-bar img.image",
+      "ytmusic-player-bar img#img",
+      "ytmusic-player-bar img",
+      "#song-image img",
+      "img.ytmusic-player-bar",
+    ],
     next: ".next-button.ytmusic-player-bar",
     prev: ".previous-button.ytmusic-player-bar",
   };
@@ -33,8 +41,35 @@
     }
   }
 
-  // Byline is "Artist • Album • Year" for songs (or "Artist • Views • Year" for
-  // uploaded videos — album may be approximate there; acceptable for v1).
+  function videoIdFromArtwork(url) {
+    if (typeof url !== "string") return null;
+    const m = url.match(/\/vi\/([A-Za-z0-9_-]{6,})\//);
+    return m ? m[1] : null;
+  }
+
+  // The player-bar title is usually a link to watch?v=<id>; recover the id there
+  // when the page URL is a playlist/library view and the art is album art.
+  function videoIdFromPlayerBar() {
+    const a = document.querySelector('ytmusic-player-bar a[href*="watch?v="]');
+    if (!a) return null;
+    try {
+      return new URL(a.href, location.href).searchParams.get("v") || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // A view-count segment ("141 K visualizaciones", "1.2M views", "3,4 Mio. Aufrufe"…)
+  // — language-agnostic-ish: it carries a digit AND a "views" word. Used to tell a
+  // real song byline ("Artist • Album • Year") from a video byline
+  // ("Artist • Views • Year"), where there is no album.
+  const VIEWS_WORD = /(views?|visualizaç|visualizaciones|reproducc|vues|aufrufe|просмотр|再生|회|观看|次)/i;
+  const isViewCount = (s) => /\d/.test(s) && VIEWS_WORD.test(s);
+  const isYearOnly = (s) => /^\d{4}$/.test(s);
+
+  // Byline is "Artist • Album • Year" for songs, or "Artist • Views • Year" for
+  // uploaded videos (no album). Take parts[1] as album only when it looks like a
+  // real album name — not a view count and not a bare year.
   function parseByline() {
     const raw = text(SELECTORS.byline);
     if (!raw) return { artist: null, album: null };
@@ -42,10 +77,21 @@
       .split("•")
       .map((s) => s.trim())
       .filter(Boolean);
-    return {
-      artist: parts[0] || null,
-      album: parts.length >= 3 ? parts[1] || null : null,
-    };
+    const mid = parts.length >= 3 ? parts[1] : null;
+    const album = mid && !isViewCount(mid) && !isYearOnly(mid) ? mid : null;
+    return { artist: parts[0] || null, album };
+  }
+
+  // Walk the candidate selectors; return the largest srcset URL from the first
+  // <img> that actually has a usable source. common.js then host-allowlists it.
+  function pickArtwork() {
+    for (const sel of SELECTORS.image) {
+      const img = document.querySelector(sel);
+      if (!img) continue;
+      const url = __ytBridge.largestSrcsetUrl(img);
+      if (url) return url;
+    }
+    return null;
   }
 
   const adapter = {
@@ -59,13 +105,22 @@
 
     readMeta() {
       const { artist, album } = parseByline();
-      const img = document.querySelector(SELECTORS.image);
+      const artworkUrl = pickArtwork();
+      // On playlist/library pages the URL has no ?v=; recover the id from the
+      // player-bar thumbnail (i.ytimg.com/vi/<id>/...).
+      const videoId =
+        videoIdFromUrl() ||
+        videoIdFromPlayerBar() ||
+        videoIdFromArtwork(artworkUrl);
       return {
         title: text(SELECTORS.title),
         artist,
         album,
-        videoId: videoIdFromUrl(),
-        artworkUrl: __ytBridge.largestSrcsetUrl(img),
+        videoId,
+        artworkUrl,
+        url: videoId
+          ? "https://music.youtube.com/watch?v=" + videoId
+          : location.href,
       };
     },
 

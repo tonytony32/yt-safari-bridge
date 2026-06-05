@@ -7,11 +7,7 @@
 (function () {
   "use strict";
 
-  const ARTWORK_HOSTS = new Set([
-    "i.ytimg.com",
-    "lh3.googleusercontent.com",
-    "music.youtube.com",
-  ]);
+  const ARTWORK_HOSTS = new Set(["i.ytimg.com", "music.youtube.com"]);
   const safe = (n) => (Number.isFinite(n) ? n : null);
   const text = (sel) => {
     const el = document.querySelector(sel);
@@ -25,11 +21,15 @@
       return null;
     }
   };
+  const artworkHostOk = (h) =>
+    ARTWORK_HOSTS.has(h) ||
+    h === "googleusercontent.com" ||
+    h.endsWith(".googleusercontent.com");
   function allowlistArtwork(url) {
     if (typeof url !== "string" || !url) return null;
     try {
       const u = new URL(url, location.href);
-      return ARTWORK_HOSTS.has(u.hostname) ? u.href : null;
+      return artworkHostOk(u.hostname) ? u.href : null;
     } catch {
       return null;
     }
@@ -56,18 +56,52 @@
 
   const isMusic = location.hostname === "music.youtube.com";
 
+  const VIEWS_WORD = /(views?|visualizaç|visualizaciones|reproducc|vues|aufrufe|просмотр|再生|회|观看|次)/i;
+  const isViewCount = (s) => /\d/.test(s) && VIEWS_WORD.test(s);
+  const isYearOnly = (s) => /^\d{4}$/.test(s);
+  const MUSIC_IMG_SELS = [
+    "ytmusic-player-bar #song-image img",
+    "ytmusic-player-bar img.image",
+    "ytmusic-player-bar img#img",
+    "ytmusic-player-bar img",
+    "#song-image img",
+    "img.ytmusic-player-bar",
+  ];
+
+  const vidFromArtwork = (u) => {
+    const m = typeof u === "string" && u.match(/\/vi\/([A-Za-z0-9_-]{6,})\//);
+    return m ? m[1] : null;
+  };
+  const vidFromPlayerBar = () => {
+    const a = document.querySelector('ytmusic-player-bar a[href*="watch?v="]');
+    try {
+      return a ? new URL(a.href, location.href).searchParams.get("v") : null;
+    } catch {
+      return null;
+    }
+  };
+
   function readMusic() {
     const raw = text(".byline.ytmusic-player-bar");
     const parts = raw ? raw.split("•").map((s) => s.trim()).filter(Boolean) : [];
-    const img = document.querySelector(
-      "#song-image img, img.ytmusic-player-bar, .image.ytmusic-player-bar img"
-    );
+    const mid = parts.length >= 3 ? parts[1] : null;
+    const album = mid && !isViewCount(mid) && !isYearOnly(mid) ? mid : null;
+    let artworkUrl = null;
+    for (const sel of MUSIC_IMG_SELS) {
+      const u = largestSrcsetUrl(document.querySelector(sel));
+      if (u) {
+        artworkUrl = u;
+        break;
+      }
+    }
+    const videoId = vid() || vidFromPlayerBar() || vidFromArtwork(artworkUrl);
     return {
       title: text(".title.ytmusic-player-bar"),
       artist: parts[0] || null,
-      album: parts.length >= 3 ? parts[1] || null : null,
-      videoId: vid(),
-      artworkUrl: largestSrcsetUrl(img),
+      album,
+      videoId,
+      artworkUrl,
+      url: videoId ? "https://music.youtube.com/watch?v=" + videoId : location.href,
     };
   }
 
@@ -98,7 +132,7 @@
       durationSec: safe(video.duration),
       positionSec: safe(video.currentTime),
       videoId: meta.videoId || null,
-      url: location.href,
+      url: meta.url || location.href,
       artworkUrl: allowlistArtwork(meta.artworkUrl),
       volume: safe(video.volume),
     };
