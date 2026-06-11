@@ -43,13 +43,26 @@ final class HTTPServer {
 
     private init() {}
 
-    /// Idempotent: start the listener once per extension process.
-    func startOnce() {
+    /// Ensure the listener is up. Idempotent while a listener is alive, but —
+    /// unlike a one-shot start — it revives a listener the system tore down.
+    ///
+    /// Called on every native-message sync (and on a short timer after a
+    /// failure), so a listener cancelled when macOS suspended the extension
+    /// process (e.g. its tab went to the background) comes back on the next sync
+    /// instead of staying dead for the life of the process. That permanent-dead
+    /// case is the root of the "socket CLOSED while the handler is still alive"
+    /// flakiness: the old `startOnce` set `started = true` once and never
+    /// recovered after `.cancelled`/`.failed`.
+    func ensureRunning() {
         lock.lock()
         defer { lock.unlock() }
         guard !started else { return }
         started = true
+        startListenerLocked()
+    }
 
+    /// Build and start a fresh listener. Caller must hold `lock`.
+    private func startListenerLocked() {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(
             host: "127.0.0.1",
@@ -65,8 +78,10 @@ final class HTTPServer {
                     self?.log.notice("listener ready on 127.0.0.1:\(Self.port, privacy: .public)")
                 case .failed(let e):
                     self?.log.error("listener failed: \(String(describing: e), privacy: .public)")
+                    self?.handleListenerDown()
                 case .cancelled:
                     self?.log.notice("listener cancelled")
+                    self?.handleListenerDown()
                 default:
                     break
                 }
@@ -78,6 +93,25 @@ final class HTTPServer {
             listener = l
         } catch {
             log.error("NWListener init threw: \(String(describing: error), privacy: .public)")
+            started = false   // allow a later retry
+        }
+    }
+
+    /// A listener went down (failed / cancelled by the system). Drop it and
+    /// schedule a revive; the next sync's `ensureRunning()` would revive it too,
+    /// but the timer covers the case where syncs have paused. `guard wasStarted`
+    /// dedups the `.cancelled` our own `cancel()` re-fires, so there's no loop.
+    private func handleListenerDown() {
+        lock.lock()
+        let wasStarted = started
+        started = false
+        let old = listener
+        listener = nil
+        lock.unlock()
+        guard wasStarted else { return }
+        old?.cancel()
+        connQueue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.ensureRunning()
         }
     }
 
