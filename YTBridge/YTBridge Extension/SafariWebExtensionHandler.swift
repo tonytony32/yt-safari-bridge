@@ -17,8 +17,8 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     private static let log = Logger(subsystem: "com.trypwood.ytbridge", category: "handler")
 
     func beginRequest(with context: NSExtensionContext) {
-        // Lazily prove (and hold) the listening socket on the first message.
-        BindSpike.runOnce()
+        // Lazily start (and hold) the local HTTP server on the first message.
+        HTTPServer.shared.startOnce()
 
         let request = context.inputItems.first as? NSExtensionItem
         let message: Any?
