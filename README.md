@@ -23,32 +23,55 @@ The port `8976` is a **hardcoded constant**; changing it means rebuilding.
 
 - **Phase 0 — content scripts (pure JS): done.** No Xcode yet; the extension cannot be
   loaded into Safari until Phase 1 produces the containing app.
-- Phase 1 — Xcode project via `safari-web-extension-converter` + the `NWListener` bind spike.
-- Phase 2 — HTTP server in the handler process.
-- Phase 3 — commands end-to-end.
-- Phase 4 — hardening + handoff.
+- **Phase 1 — done.** Xcode project via `safari-web-extension-converter`; `NWListener` bind
+  spike validated **GO** (the extension sandbox permits a loopback listening socket, confirmed
+  via `lsof` showing `127.0.0.1:8976 (LISTEN)`). Signed with a personal Apple Development team.
+- **Phase 2 — done.** Hand-rolled HTTP/1.1 server in the extension process. Full security model
+  verified (bad `Host`→403, `Origin`→403, >8 KB→413, `nosniff` present, no CORS).
+- **Phase 3 — done.** Commands end-to-end: `toggle`, `seek`, `setVolume`, `next` all confirmed
+  driving real playback via `POST /v1/command`.
+- **Phase 4 — done.** Container-app status UI (server up/idle + current track), multi-tab
+  arbitration hardening, docs handoff.
 
-## Repo layout (Phase 0)
+The HTTP API is live and stable on `127.0.0.1:8976`; JellySleeve can integrate against
+[`docs/api.md`](docs/api.md) now.
+
+## Repo layout
 
 ```
 yt-safari-bridge/
-├── PLAN.md
-├── README.md
+├── PLAN.md / README.md
 ├── docs/
 │   ├── api.md            ← HTTP contract for JellySleeve
 │   └── console-test.js   ← paste into Safari Web Inspector to validate the scrapers
-└── extension/
-    ├── manifest.json
-    ├── background.js      ← event-driven relay (no timers)
-    ├── common.js          ← shared helpers + the push/command engine
-    └── content/
-        ├── youtube.js
-        └── ytmusic.js
+└── YTBridge/
+    ├── YTBridge.xcodeproj
+    ├── YTBridge/                       ← container app (status window)
+    │   ├── ViewController.swift        ← polls the API natively, pushes status to the page
+    │   └── Resources/ (Main.html, Script.js, …)
+    └── YTBridge Extension/
+        ├── SafariWebExtensionHandler.swift  ← native messaging entry; starts the server
+        ├── StateStore.swift                 ← latest state + 3s staleness + bounded queue
+        ├── HTTPServer.swift                 ← HTTP/1.1 server (loopback, security model)
+        └── Resources/                       ← canonical manifest.json + JS (single source of truth)
+            ├── manifest.json
+            ├── background.js
+            ├── common.js
+            └── content/{youtube.js, ytmusic.js}
 ```
 
-After Phase 1, the converter copies `extension/` into the Xcode project's extension target
-Resources and **the top-level `extension/` folder is deleted in the same commit** — from then
-on the copy inside `YTBridge Extension/Resources/` is the single source of truth.
+The top-level `extension/` folder was migrated into `YTBridge Extension/Resources/` (Phase 1)
+and deleted; that copy is now the single source of truth.
+
+## Build
+
+```
+xcodebuild -project YTBridge/YTBridge.xcodeproj -scheme YTBridge -configuration Debug \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Automatic build
+```
+
+Then run the **YTBridge** app once (registers the extension), enable it in Safari, and grant
+site access (below). The app window shows live bridge status and a Refresh button.
 
 ## Phase 0 acceptance (do this before Phase 1)
 
