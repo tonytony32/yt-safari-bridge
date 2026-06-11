@@ -182,6 +182,7 @@ final class HTTPServer {
                 "ok": true,
                 "safariLastPollMs": StateStore.shared.millisSinceLastSync() as Any,
                 "version": Self.version,
+                "capabilities": Self.capabilities,
             ])
 
         case ("POST", "/v1/command"):
@@ -194,6 +195,19 @@ final class HTTPServer {
 
     private static let validActions: Set<String> = [
         "play", "pause", "toggle", "next", "previous", "seek", "setVolume",
+    ]
+
+    /// Self-describing capabilities so a generic consumer (arbiter) doesn't hard-code
+    /// per-backend quirks. Constant for this source: full transport control, but no
+    /// favorites and no queue (YouTube / YouTube Music). See docs/playback-source.md.
+    private static let capabilities: [String: Bool] = [
+        "canPlayPause": true,
+        "canNext": true,
+        "canPrevious": true,
+        "canSeek": true,
+        "canSetVolume": true,
+        "hasFavorites": false,
+        "hasQueue": false,
     ]
 
     private func handleCommand(_ conn: NWConnection, body: Data) {

@@ -93,11 +93,31 @@ The queue is **bounded at 16 commands, dropping the oldest** on overflow.
 ## `GET /v1/health`
 
 ```json
-{ "ok": true, "safariLastPollMs": 312, "version": "0.1.0" }
+{
+  "ok": true,
+  "safariLastPollMs": 312,
+  "version": "0.1.0",
+  "capabilities": {
+    "canPlayPause": true,
+    "canNext": true,
+    "canPrevious": true,
+    "canSeek": true,
+    "canSetVolume": true,
+    "hasFavorites": false,
+    "hasQueue": false
+  }
+}
 ```
 
 `safariLastPollMs` > ~3000 means the extension isn't syncing (Safari closed / extension
-disabled / no YT tab).
+disabled / no YT tab). `capabilities` is self-describing so a generic consumer doesn't hard-code
+per-backend quirks (this source has no favorites and no queue).
+
+## Generic source contract
+
+This API is one implementation of a **vendor-neutral `PlaybackSource` contract** — see
+[`playback-source.md`](playback-source.md). Code consumers (e.g. JellySleeve's source arbiter)
+against that normalized model + MPRIS mapping, not against YouTube-specific shapes.
 
 ## Consumer guidance
 
