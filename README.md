@@ -65,13 +65,18 @@ and deleted; that copy is now the single source of truth.
 
 ## Build
 
+Set `DEVELOPMENT_TEAM` to your own Apple Development team ID (Xcode → Settings → Accounts, or
+open the project and pick a Team under **Signing & Capabilities**):
+
 ```
 xcodebuild -project YTBridge/YTBridge.xcodeproj -scheme YTBridge -configuration Debug \
-  -allowProvisioningUpdates DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Automatic build
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=YOUR_TEAM_ID CODE_SIGN_STYLE=Automatic build
 ```
 
-Then run the **YTBridge** app once (registers the extension), enable it in Safari, and grant
-site access (below). The app window shows live bridge status and a Refresh button.
+A free personal Apple ID team is enough (the extension persists across Safari sessions; no
+"Allow Unsigned Extensions" needed). Then run the **YTBridge** app once (registers the
+extension), enable it in Safari, and grant site access (below). The app window shows live
+bridge status and a Refresh button.
 
 ## Phase 0 acceptance (do this before Phase 1)
 

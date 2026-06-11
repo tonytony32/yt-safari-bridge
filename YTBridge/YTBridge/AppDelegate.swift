@@ -2,8 +2,6 @@
 //  AppDelegate.swift
 //  YTBridge
 //
-//  Created by  on 5/6/26.
-//
 
 import Cocoa
 
