@@ -134,7 +134,39 @@
       if (btn) btn.click();
       else if (video) video.currentTime = 0;
     },
+
+    // YT Music owns volume through its Polymer slider and re-asserts it onto the
+    // <video> a few seconds after we set it — so setting <video>.volume alone is
+    // transient. Drive the real slider instead, via the page-world helper (its
+    // `.value` setter is unreachable from the content script's isolated world).
+    // We also set <video>.volume here for immediate audio feedback even if the
+    // helper is unavailable (e.g. blocked before it loads).
+    setVolume(frac) {
+      const v = Math.min(1, Math.max(0, frac));
+      const video = document.querySelector("video");
+      if (video) video.volume = v;
+      try {
+        document.documentElement.setAttribute(
+          "data-ytbridge-volume",
+          String(Math.round(v * 100))
+        );
+        window.dispatchEvent(new Event("ytbridge-setvolume"));
+      } catch {}
+    },
   };
+
+  // Inject the page-world volume helper once. `<script src=…>` (not innerHTML /
+  // eval) keeps the no-dynamic-code rule; it runs in the page world so it can
+  // reach `#movie_player` / the slider's Polymer setter.
+  function injectPageVolumeHelper() {
+    try {
+      const s = document.createElement("script");
+      s.src = browser.runtime.getURL("content/page-volume.js");
+      s.addEventListener("load", () => s.remove());
+      (document.head || document.documentElement).appendChild(s);
+    } catch {}
+  }
+  injectPageVolumeHelper();
 
   __ytBridge.run(adapter);
 })();

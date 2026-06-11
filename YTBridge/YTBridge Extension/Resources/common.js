@@ -47,12 +47,34 @@
   const safe = (n) => (Number.isFinite(n) ? n : null);
   const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
 
+  // Upgrade a thumbnail URL to a higher resolution where the host supports it,
+  // so the consumer's overlay isn't fed a ~120px player-bar thumb. Applied after
+  // the host allowlist (below), so it only ever rewrites trusted hosts.
+  function hiResArtwork(u) {
+    // Google image CDN (YT Music album art): the size lives in the URL as
+    // =w60-h60-… or =s90. These serve any requested size, so bumping is safe.
+    if (u.hostname.endsWith("googleusercontent.com")) {
+      return u.href
+        .replace(/=w\d+-h\d+/, "=w544-h544")
+        .replace(/=s\d+/, "=s544");
+    }
+    // YouTube video thumbnails (i.ytimg.com/vi/<id>/<name>.jpg): sddefault (640)
+    // is near-universally present and a clear step up from hqdefault (480).
+    if (u.hostname === "i.ytimg.com") {
+      return u.href.replace(
+        /\/(?:default|mqdefault|hqdefault|sddefault|maxresdefault)\.jpg/,
+        "/sddefault.jpg"
+      );
+    }
+    return u.href;
+  }
+
   function allowlistArtwork(url) {
     if (typeof url !== "string" || url.length === 0) return null;
     try {
       const u = new URL(url, location.href);
       if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-      return artworkHostOk(u.hostname) ? u.href : null;
+      return artworkHostOk(u.hostname) ? hiResArtwork(u) : null;
     } catch {
       return null;
     }
@@ -205,8 +227,15 @@
           }
           break;
         case "setVolume":
-          if (video && typeof value === "number" && Number.isFinite(value)) {
-            video.volume = clamp(value, 0, 1);
+          if (typeof value === "number" && Number.isFinite(value)) {
+            // Sources whose volume the page re-asserts (YT Music) provide an
+            // adapter hook that drives the site's own control so the change
+            // sticks; others just set <video>.volume directly.
+            if (typeof adapter.setVolume === "function") {
+              adapter.setVolume(clamp(value, 0, 1));
+            } else if (video) {
+              video.volume = clamp(value, 0, 1);
+            }
           }
           break;
         case "next":
