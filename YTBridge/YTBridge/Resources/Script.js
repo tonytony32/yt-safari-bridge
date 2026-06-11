@@ -20,3 +20,36 @@ function openPreferences() {
 }
 
 document.querySelector("button.open-preferences").addEventListener("click", openPreferences);
+
+// Called by the native side (ViewController) with the result of polling the local
+// bridge API. `data` is {up:false} when the server is unreachable (bridge idle), or
+// {up:true, state:<GET /v1/now-playing body>} when it answered.
+function showBridge(data) {
+    const serverLine = document.getElementById("server-line");
+    const trackLine = document.getElementById("track-line");
+    if (!serverLine || !trackLine) return;
+
+    if (!data || !data.up) {
+        serverLine.textContent = "Bridge: offline (idle) — connection refused. Safari closed or no YouTube tab open.";
+        trackLine.textContent = "";
+        return;
+    }
+
+    const s = data.state || {};
+    if (s.active) {
+        serverLine.textContent = "Bridge: ✅ listening on 127.0.0.1:8976 — Safari is syncing.";
+        // textContent (never innerHTML): title/artist are untrusted page content.
+        const where = s.source === "youtube_music" ? "YT Music" : "YouTube";
+        trackLine.textContent =
+            `${s.state === "playing" ? "▶︎" : "❚❚"} ${s.title || "(unknown)"} — ${s.artist || ""}  ·  ${where}`;
+    } else {
+        serverLine.textContent = "Bridge: ✅ listening on 127.0.0.1:8976 — no active player (nothing playing).";
+        trackLine.textContent = "";
+    }
+}
+
+function refreshBridge() {
+    webkit.messageHandlers.controller.postMessage("refresh");
+}
+
+document.querySelector("button.refresh").addEventListener("click", refreshBridge);

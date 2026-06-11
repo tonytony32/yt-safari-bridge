@@ -15,10 +15,17 @@ const tabStates = new Map();
 let activeTabId = null;
 
 function pickFallbackActive() {
-  // On active-tab removal, fall back to the most recently updated remaining tab.
+  // On active-tab removal, prefer the most-recently-updated tab that is still
+  // playing; otherwise fall back to the most-recently-updated tab of any state.
+  // The Map is kept in update-recency order (see onMessage: delete+set), so the
+  // last matching key is the most recent.
+  let playing = null;
   let last = null;
-  for (const id of tabStates.keys()) last = id; // Map preserves insertion order
-  return last;
+  for (const [id, st] of tabStates) {
+    last = id;
+    if (st && st.state === "playing") playing = id;
+  }
+  return playing ?? last;
 }
 
 // The state JellySleeve should see, with tabId attached. {active:false} when idle.
@@ -58,6 +65,9 @@ function dispatchToActiveTab(cmd) {
 browser.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "state" || !sender || !sender.tab) return;
   const tabId = sender.tab.id;
+  // Re-insert to move this tab to the end → Map order tracks update recency,
+  // which pickFallbackActive() relies on when the active tab closes.
+  tabStates.delete(tabId);
   tabStates.set(tabId, msg.state);
   if (msg.state && msg.state.state === "playing") activeTabId = tabId;
   else if (activeTabId == null) activeTabId = tabId;

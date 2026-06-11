@@ -4,5 +4,10 @@
 <dict>
 	<key>SFSafariWebExtensionConverterVersion</key>
 	<string>26.5</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
