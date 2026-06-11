@@ -107,3 +107,14 @@ The scrapers can be validated without Safari loading the extension at all:
   isn't syncing (Safari closed / extension disabled / no YT tab open).
 - **Connection refused means the bridge is idle**, not an error — Safari is closed or no YT
   tab is open, and the handler process was reaped. It restarts lazily on the next sync.
+
+## License
+
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
+
+Copyright (C) 2026 tonytony32.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU GPL as published by the Free Software Foundation, either version 3 of the License, or (at
+your option) any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
