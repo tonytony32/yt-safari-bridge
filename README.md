@@ -110,11 +110,13 @@ The scrapers can be validated without Safari loading the extension at all:
 
 ## License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
 
 Copyright (C) 2026 tonytony32.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the
-GNU GPL as published by the Free Software Foundation, either version 3 of the License, or (at
-your option) any later version. It is distributed WITHOUT ANY WARRANTY; without even the
-implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+GNU Affero General Public License as published by the Free Software Foundation, either version 3
+of the License, or (at your option) any later version. In particular, if you run a modified
+version of this program as a network service, you must make the Corresponding Source of your
+modified version available to its users (AGPL §13). It is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
