@@ -17,8 +17,9 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     private static let log = Logger(subsystem: "com.trypwood.ytbridge", category: "handler")
 
     func beginRequest(with context: NSExtensionContext) {
-        // Lazily start (and hold) the local HTTP server on the first message.
-        HTTPServer.shared.startOnce()
+        // Ensure the local HTTP server is up on every sync — it self-heals if
+        // the system tore the listener down while the extension was suspended.
+        HTTPServer.shared.ensureRunning()
 
         let request = context.inputItems.first as? NSExtensionItem
         let message: Any?
