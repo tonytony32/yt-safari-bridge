@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Local signing config (personal Apple Development Team ID — never commit)
+Local.xcconfig
+
 # Xcode (added in Phase 1)
 *.xcuserstate
 xcuserdata/
