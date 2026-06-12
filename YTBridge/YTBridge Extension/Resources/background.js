@@ -104,12 +104,27 @@ function persistVolume(tabId, value) {
     world: "MAIN",
     func: (frac) => {
       const v = Math.min(1, Math.max(0, frac));
+      const pct = Math.round(v * 100);
+      // The player API: the source of truth for audio that YT Music honors and
+      // doesn't re-assert over.
       try {
         const mp = document.getElementById("movie_player");
         if (mp && typeof mp.setVolume === "function") {
           if (typeof mp.unMute === "function") mp.unMute();
-          mp.setVolume(Math.round(v * 100));
+          mp.setVolume(pct);
         }
+      } catch (e) {}
+      // YT Music's on-screen volume sliders don't track the player API on their
+      // own, so the visible control would sit at the old position. Set the Polymer
+      // .value (reachable here in the MAIN world) so the UI reflects the change.
+      try {
+        ["volume-slider", "expand-volume-slider"].forEach((id) => {
+          const sl = document.getElementById(id);
+          if (sl) {
+            sl.value = pct;
+            sl.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
       } catch (e) {}
       try {
         const el = document.querySelector("video");
