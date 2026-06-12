@@ -90,31 +90,34 @@ ensurePageWorldScripts();
 // source of truth it honors. executeScript({world:"MAIN"}) is the one MAIN-world
 // path desktop Safari runs reliably, and setVolume is command-driven so injecting
 // on demand is fine. Works on both youtube.com and music.youtube.com (both expose
-// #movie_player). value is a 0.0–1.0 fraction.
+// #movie_player). value is a 0.0–1.0 fraction. Returns the executeScript promise so
+// the caller can AWAIT it — the background is a non-persistent event page, and a
+// fire-and-forget inject gets killed when the page suspends right after the sync
+// round trip, so the volume change never lands. The caller keeps the page alive by
+// awaiting this inside the same chain that already awaits the native round trip.
 function persistVolume(tabId, value) {
-  if (tabId == null || typeof value !== "number" || !Number.isFinite(value)) return;
-  try {
-    const p = browser.scripting.executeScript({
-      target: { tabId },
-      world: "MAIN",
-      func: (frac) => {
-        const v = Math.min(1, Math.max(0, frac));
-        try {
-          const mp = document.getElementById("movie_player");
-          if (mp && typeof mp.setVolume === "function") {
-            if (typeof mp.unMute === "function") mp.unMute();
-            mp.setVolume(Math.round(v * 100));
-          }
-        } catch (e) {}
-        try {
-          const el = document.querySelector("video");
-          if (el) el.volume = v;
-        } catch (e) {}
-      },
-      args: [value],
-    });
-    if (p && typeof p.catch === "function") p.catch(() => {});
-  } catch (e) {}
+  if (tabId == null || typeof value !== "number" || !Number.isFinite(value)) {
+    return Promise.resolve();
+  }
+  return browser.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    func: (frac) => {
+      const v = Math.min(1, Math.max(0, frac));
+      try {
+        const mp = document.getElementById("movie_player");
+        if (mp && typeof mp.setVolume === "function") {
+          if (typeof mp.unMute === "function") mp.unMute();
+          mp.setVolume(Math.round(v * 100));
+        }
+      } catch (e) {}
+      try {
+        const el = document.querySelector("video");
+        if (el) el.volume = v;
+      } catch (e) {}
+    },
+    args: [value],
+  });
 }
 
 // tabId -> latest state object reported by that tab's content script.
@@ -153,27 +156,33 @@ async function syncNative() {
       state: activeState(),
     });
     const commands = (reply && reply.commands) || [];
-    for (const cmd of commands) dispatchToActiveTab(cmd);
+    // Await each dispatch so the event page stays alive until the MAIN-world volume
+    // inject (executeScript) actually completes — see persistVolume.
+    for (const cmd of commands) await dispatchToActiveTab(cmd);
   } catch (e) {
     // No native host yet (Phase 0) or handler momentarily down: ignore. The next
     // content-script push will retry the round trip.
   }
 }
 
-function dispatchToActiveTab(cmd) {
+async function dispatchToActiveTab(cmd) {
   if (activeTabId == null || !cmd || typeof cmd.action !== "string") return;
   try {
-    const p = browser.tabs.sendMessage(activeTabId, {
+    await browser.tabs.sendMessage(activeTabId, {
       type: "command",
       action: cmd.action,
       value: cmd.value,
     });
-    if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {}
   // The content-script message above sets <video>.volume for instant feedback, but
   // YT Music re-asserts over it; make the change stick by also driving the real
-  // player API in the MAIN world (the content script can't reach it).
-  if (cmd.action === "setVolume") persistVolume(activeTabId, cmd.value);
+  // player API in the MAIN world (the content script can't reach it). Awaited so the
+  // event page doesn't suspend mid-inject.
+  if (cmd.action === "setVolume") {
+    try {
+      await persistVolume(activeTabId, cmd.value);
+    } catch (e) {}
+  }
 }
 
 browser.runtime.onMessage.addListener((msg, sender) => {
