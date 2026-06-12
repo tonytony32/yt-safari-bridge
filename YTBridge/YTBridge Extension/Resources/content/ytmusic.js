@@ -155,11 +155,9 @@
     },
   };
 
-  // Page-world helpers (both unreachable from this isolated world):
-  //  - page-volume.js drives #movie_player / the slider's Polymer setter.
-  //  - page-mediasession.js clears the macOS Now Playing card on teardown.
-  __ytBridge.injectPageScript("content/page-volume.js");
-  __ytBridge.injectPageScript("content/page-mediasession.js");
-
+  // The page-world helpers (page-volume.js drives #movie_player; page-mediasession.js
+  // clears the macOS Now Playing card on teardown) run in the MAIN world — both are
+  // registered by background.js as MAIN-world content scripts, since injecting them
+  // here with <script src> is blocked by YouTube's CSP.
   __ytBridge.run(adapter);
 })();
