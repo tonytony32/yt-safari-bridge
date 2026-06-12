@@ -43,11 +43,31 @@ async function syncNative() {
       state: activeState(),
     });
     const commands = (reply && reply.commands) || [];
-    for (const cmd of commands) dispatchToActiveTab(cmd);
+    for (const cmd of commands) {
+      // focusTab is a tab/window action (raise the playing tab), not a playback
+      // command — handle it here instead of forwarding to the content script,
+      // which default-rejects anything outside its playback allowlist.
+      if (cmd && cmd.action === "focusTab") focusActiveTab();
+      else dispatchToActiveTab(cmd);
+    }
   } catch (e) {
     // No native host yet (Phase 0) or handler momentarily down: ignore. The next
     // content-script push will retry the round trip.
   }
+}
+
+// Bring the active (playing) tab — and its window — to the foreground. Triggered
+// by a focusTab command (the container app's "double-click the cover art"). Uses
+// tabs.update / windows.update, which work with our host permissions alone (the
+// `tabs` permission only gates reading url/title, which we never need).
+async function focusActiveTab() {
+  if (activeTabId == null) return;
+  try {
+    const tab = await browser.tabs.update(activeTabId, { active: true });
+    if (tab && tab.windowId != null) {
+      await browser.windows.update(tab.windowId, { focused: true });
+    }
+  } catch {}
 }
 
 function dispatchToActiveTab(cmd) {

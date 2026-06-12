@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://i.ytimg.com https://music.youtube.com https://*.googleusercontent.com">
 
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 
@@ -18,6 +18,7 @@
 
     <hr>
     <h3>Bridge status</h3>
+    <img id="artwork" alt="Current track cover art" title="Double-click to bring the YouTube tab to the front" hidden>
     <p id="server-line">Checking the local bridge…</p>
     <p id="track-line"></p>
     <button class="refresh">Refresh</button>
