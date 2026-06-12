@@ -65,11 +65,18 @@ function dispatchToActiveTab(cmd) {
 browser.runtime.onMessage.addListener((msg, sender) => {
   if (!msg || msg.type !== "state" || !sender || !sender.tab) return;
   const tabId = sender.tab.id;
+  const wasPlaying =
+    tabStates.has(tabId) && tabStates.get(tabId)?.state === "playing";
+  const nowPlaying = !!(msg.state && msg.state.state === "playing");
   // Re-insert to move this tab to the end → Map order tracks update recency,
   // which pickFallbackActive() relies on when the active tab closes.
   tabStates.delete(tabId);
   tabStates.set(tabId, msg.state);
-  if (msg.state && msg.state.state === "playing") activeTabId = tabId;
+  // Hand off the active slot only on the rising edge (a tab transitioning *into*
+  // playing). Doing it on every "playing" heartbeat made two tabs playing at once
+  // flip activeTabId back and forth every ~500ms, so now-playing oscillated between
+  // their two tracks. A steady-state heartbeat from the already-active tab keeps it.
+  if (nowPlaying && !wasPlaying) activeTabId = tabId;
   else if (activeTabId == null) activeTabId = tabId;
   // Relay this push (and pull back any queued commands) in one round trip.
   syncNative();
