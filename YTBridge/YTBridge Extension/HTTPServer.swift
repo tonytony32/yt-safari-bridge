@@ -40,6 +40,9 @@ final class HTTPServer {
     private let connQueue = DispatchQueue(label: "com.trypwood.ytbridge.http", attributes: .concurrent)
     private let countLock = NSLock()
     private var liveConnections = 0
+    // Per-connection hard-deadline timers, keyed by identity. Presence in this map
+    // is also the "still live" guard that makes finish() decrement exactly once.
+    private var connTimers: [ObjectIdentifier: DispatchWorkItem] = [:]
 
     private init() {}
 
@@ -118,9 +121,21 @@ final class HTTPServer {
     // MARK: - Connection handling
 
     private func accept(_ conn: NWConnection) {
+        let id = ObjectIdentifier(conn)
+
+        // Hard wall-clock deadline. The per-read deadline check in receiveRequest
+        // only fires when bytes arrive; a peer that connects and then stalls (or
+        // dribbles half a header and freezes) never wakes that callback, so without
+        // this timer it would hold a connection slot until the OS keepalive reaps it
+        // — eight such peers exhaust maxConnections and lock out the real consumer.
+        let timeout = DispatchWorkItem { [weak self] in self?.finish(conn) }
+
         countLock.lock()
         let over = liveConnections >= Self.maxConnections
-        if !over { liveConnections += 1 }
+        if !over {
+            liveConnections += 1
+            connTimers[id] = timeout
+        }
         countLock.unlock()
 
         if over {
@@ -128,14 +143,24 @@ final class HTTPServer {
             return
         }
 
+        connQueue.asyncAfter(deadline: .now() + Self.readTimeout, execute: timeout)
         conn.start(queue: connQueue)
         receiveRequest(conn, buffer: Data(), deadline: Date().addingTimeInterval(Self.readTimeout))
     }
 
+    /// Tear a connection down exactly once. The deadline timer and any normal
+    /// completion path both route here; whoever removes the timer from the map
+    /// first owns the single decrement, and the loser becomes a no-op.
     private func finish(_ conn: NWConnection) {
+        let id = ObjectIdentifier(conn)
         countLock.lock()
+        guard let timer = connTimers.removeValue(forKey: id) else {
+            countLock.unlock()
+            return // already finished (timeout vs. response race)
+        }
         liveConnections = max(0, liveConnections - 1)
         countLock.unlock()
+        timer.cancel()
         conn.cancel()
     }
 
@@ -255,24 +280,29 @@ final class HTTPServer {
         }
 
         // seek / setVolume require a finite numeric value.
+        var command: [String: Any] = ["action": action]
         if action == "seek" || action == "setVolume" {
             guard let v = obj["value"] as? Double, v.isFinite else {
                 respond(conn, status: 400, reason: "Bad Request", json: ["error": "bad_value"])
                 return
             }
-            if !StateStore.shared.isStale() {
-                StateStore.shared.enqueue(command: ["action": action, "value": v])
-            }
-        } else {
-            if !StateStore.shared.isStale() {
-                StateStore.shared.enqueue(command: ["action": action])
-            }
+            command["value"] = v
         }
 
+        // No sync within the staleness window: Safari is closed / extension disabled
+        // / no YT tab. Don't queue into the void.
         if StateStore.shared.isStale() {
             respond(conn, status: 503, reason: "Service Unavailable", json: ["error": "safari_disconnected"])
             return
         }
+        // Synced, but the active tab reports nothing playable — the command would be
+        // silently dropped by the background relay, so say so instead of a false 202.
+        if (StateStore.shared.currentState()["active"] as? Bool) != true {
+            respond(conn, status: 409, reason: "Conflict", json: ["error": "no_active_player"])
+            return
+        }
+
+        StateStore.shared.enqueue(command: command)
         respond(conn, status: 202, reason: "Accepted", json: ["queued": true])
     }
 

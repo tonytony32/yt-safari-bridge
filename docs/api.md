@@ -63,8 +63,9 @@ Field notes:
 - `artist`: YouTube → channel name.
 - `album`: YT Music only, else `null`.
 - `durationSec`: `null` = unknown/livestream.
-- `artworkUrl`: `null` unless its host is allowlisted (`i.ytimg.com`,
-  `lh3.googleusercontent.com`, `music.youtube.com`).
+- `artworkUrl`: `null` unless its host is allowlisted — `i.ytimg.com`,
+  `music.youtube.com`, or any `*.googleusercontent.com` subdomain (`yt3`/`yt4`/`lh3`…
+  are all Google-owned image CDNs). Anything off this list becomes `null`.
 
 `{"active": false}` is returned when nothing is playing/paused, **and also whenever the last
 sync from Safari is older than 3 s** (staleness rule — covers crashed tabs, closed Safari,
@@ -86,7 +87,8 @@ Errors:
 
 - `400` — unknown action / missing or non-numeric value.
 - `503 {"error": "safari_disconnected"}` — last sync older than 3 s (don't queue into the void).
-- `409 {"error": "no_active_player"}` — surfaced via subsequent state.
+- `409 {"error": "no_active_player"}` — Safari is syncing but the active tab reports
+  nothing playable, so the command would be dropped. Returned synchronously (not queued).
 
 The queue is **bounded at 16 commands, dropping the oldest** on overflow.
 
