@@ -155,18 +155,11 @@
     },
   };
 
-  // Inject the page-world volume helper once. `<script src=…>` (not innerHTML /
-  // eval) keeps the no-dynamic-code rule; it runs in the page world so it can
-  // reach `#movie_player` / the slider's Polymer setter.
-  function injectPageVolumeHelper() {
-    try {
-      const s = document.createElement("script");
-      s.src = browser.runtime.getURL("content/page-volume.js");
-      s.addEventListener("load", () => s.remove());
-      (document.head || document.documentElement).appendChild(s);
-    } catch {}
-  }
-  injectPageVolumeHelper();
+  // Page-world helpers (both unreachable from this isolated world):
+  //  - page-volume.js drives #movie_player / the slider's Polymer setter.
+  //  - page-mediasession.js clears the macOS Now Playing card on teardown.
+  __ytBridge.injectPageScript("content/page-volume.js");
+  __ytBridge.injectPageScript("content/page-mediasession.js");
 
   __ytBridge.run(adapter);
 })();
