@@ -30,6 +30,10 @@
     {
       "resources": ["content/page-volume.js"],
       "matches": ["*://music.youtube.com/*"]
+    },
+    {
+      "resources": ["content/page-mediasession.js"],
+      "matches": ["*://www.youtube.com/*", "*://music.youtube.com/*"]
     }
   ]
 }

@@ -61,5 +61,10 @@
     },
   };
 
+  // Page-world teardown helper: clears the macOS Now Playing card (the page's
+  // navigator.mediaSession, unreachable from this isolated world) when the tab or
+  // Safari closes, so the title + artwork don't linger after the app is gone.
+  __ytBridge.injectPageScript("content/page-mediasession.js");
+
   __ytBridge.run(adapter);
 })();

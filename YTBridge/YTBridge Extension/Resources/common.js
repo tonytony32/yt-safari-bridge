@@ -148,6 +148,19 @@
     );
   }
 
+  // Inject a page-world helper by extension-relative path. `<script src=…>` (not
+  // innerHTML / eval) keeps the no-dynamic-code rule; it runs in the page world,
+  // where the real player API and navigator.mediaSession (the object that feeds the
+  // macOS Now Playing card) live — both unreachable from this isolated world.
+  function injectPageScript(path) {
+    try {
+      const s = document.createElement("script");
+      s.src = browser.runtime.getURL(path);
+      s.addEventListener("load", () => s.remove());
+      (document.head || document.documentElement).appendChild(s);
+    } catch {}
+  }
+
   function run(adapter) {
     let timer = null;
     let lastSent = null;
@@ -265,6 +278,18 @@
       setTimeout(maybePushNow, 50);
     });
 
+    // Page teardown (tab/window/Safari closing): tell the bridge we're gone now so
+    // consumers go idle immediately instead of waiting out the 3s staleness window.
+    // Skip bfcache freezes (persisted) — a restore re-reports real state next tick.
+    window.addEventListener(
+      "pagehide",
+      (e) => {
+        if (e && e.persisted) return;
+        push({ active: false });
+      },
+      { capture: true }
+    );
+
     tick();
   }
 
@@ -273,6 +298,7 @@
     clamp,
     allowlistArtwork,
     largestSrcsetUrl,
+    injectPageScript,
     run,
   };
 })();
