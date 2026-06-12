@@ -135,29 +135,16 @@
       else if (video) video.currentTime = 0;
     },
 
-    // YT Music owns volume through its Polymer slider and re-asserts it onto the
-    // <video> a few seconds after we set it — so setting <video>.volume alone is
-    // transient. Drive the real slider instead, via the page-world helper (its
-    // `.value` setter is unreachable from the content script's isolated world).
-    // We also set <video>.volume here for immediate audio feedback even if the
-    // helper is unavailable (e.g. blocked before it loads).
-    setVolume(frac) {
-      const v = Math.min(1, Math.max(0, frac));
-      const video = document.querySelector("video");
-      if (video) video.volume = v;
-      try {
-        document.documentElement.setAttribute(
-          "data-ytbridge-volume",
-          String(Math.round(v * 100))
-        );
-        window.dispatchEvent(new Event("ytbridge-setvolume"));
-      } catch {}
-    },
+    // No setVolume hook here: YT Music re-asserts its own level over a bare
+    // <video>.volume within ~10–20 s, and the real player API (#movie_player) is
+    // unreachable from this isolated world. background.js makes volume stick by
+    // driving #movie_player.setVolume in the MAIN world via executeScript; the
+    // isolated-world fallback in common.js still sets <video>.volume for instant
+    // feedback.
   };
 
-  // The page-world helpers (page-volume.js drives #movie_player; page-mediasession.js
-  // clears the macOS Now Playing card on teardown) run in the MAIN world — both are
-  // registered by background.js as MAIN-world content scripts, since injecting them
-  // here with <script src> is blocked by YouTube's CSP.
+  // page-mediasession.js (clears the macOS Now Playing card on teardown) runs in the
+  // page's MAIN world, registered by background.js — injecting it here with
+  // <script src> is blocked by YouTube's CSP.
   __ytBridge.run(adapter);
 })();

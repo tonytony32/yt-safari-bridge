@@ -7,22 +7,26 @@
 
 "use strict";
 
-// Page-world helpers. The content scripts above run in Safari's ISOLATED world,
-// where the real player API (#movie_player.setVolume) and navigator.mediaSession
-// live in the page and are unreachable. These must run in the page's own JS
-// context. Injecting them with <script src="safari-web-extension://…"> is blocked
-// by YouTube's strict CSP (script-src), so we register them as MAIN-world content
-// scripts instead (scripting.registerContentScripts, Safari 16.4+) — those are
-// injected by the engine and are NOT subject to the page CSP.
+// Page-world helpers. Content scripts run in Safari's ISOLATED world, where the
+// real player API (#movie_player) and navigator.mediaSession live in the page and
+// are unreachable. Code that needs them must run in the page's MAIN world.
+//
+// Two ways to reach MAIN world; on desktop Safari they do NOT behave the same:
+//   - scripting.executeScript({world:"MAIN"}) — works. Used for setVolume, which is
+//     command-driven, so an on-demand inject per command fits (see persistVolume).
+//   - scripting.registerContentScripts({world:"MAIN"}) — the registration succeeds
+//     but desktop Safari does NOT actually inject/run it (confirmed empirically:
+//     getRegisteredContentScripts lists it, yet the script never executes). So it
+//     is unreliable for anything we depend on.
+// Injecting via <script src="safari-web-extension://…"> is a third option but is
+// blocked by YouTube's strict CSP (script-src), so it is out.
+//
+// page-mediasession.js is a teardown hook (pagehide/beforeunload) that has to be
+// resident in the page, which executeScript can't do — so it stays a registered
+// MAIN-world content script, accepting that it may be a no-op on desktop Safari
+// until Apple fixes registered MAIN injection. (It only clears a lingering Now
+// Playing card; degrading to "card lingers briefly" is acceptable.)
 const PAGE_WORLD_SCRIPTS = [
-  {
-    id: "ytbridge-page-volume",
-    matches: ["*://music.youtube.com/*"],
-    js: ["content/page-volume.js"],
-    runAt: "document_idle",
-    world: "MAIN",
-    allFrames: false,
-  },
   {
     id: "ytbridge-page-mediasession",
     matches: ["*://www.youtube.com/*", "*://music.youtube.com/*"],
@@ -33,10 +37,15 @@ const PAGE_WORLD_SCRIPTS = [
   },
 ];
 
-// On install/update: unregister first so a changed matches/world/id in a new build
-// replaces the stale registration, then register fresh.
+// Ids registered by older builds that must be torn down (page-volume.js is gone;
+// volume now goes through persistVolume()/executeScript instead).
+const OBSOLETE_SCRIPT_IDS = ["ytbridge-page-volume"];
+
+// On install/update: unregister current + obsolete ids, then register fresh, so a
+// changed matches/world/id (or a removed script) in a new build fully replaces the
+// stale registration.
 async function reregisterPageWorldScripts() {
-  const ids = PAGE_WORLD_SCRIPTS.map((s) => s.id);
+  const ids = PAGE_WORLD_SCRIPTS.map((s) => s.id).concat(OBSOLETE_SCRIPT_IDS);
   try {
     await browser.scripting.unregisterContentScripts({ ids });
   } catch (e) {
@@ -45,30 +54,68 @@ async function reregisterPageWorldScripts() {
   try {
     await browser.scripting.registerContentScripts(PAGE_WORLD_SCRIPTS);
   } catch (e) {
-    // If MAIN-world registration is unavailable, volume still changes audio via
-    // the <video>.volume fallback in the content script (it just won't persist).
+    // registerContentScripts unavailable: only the Now Playing teardown helper is
+    // affected; volume is unaffected (it goes through executeScript).
   }
 }
 
-// Self-heal on every event-page load: register only what is missing. Registration
-// persists across sessions, so after the first time this is a single cheap read.
-// This covers the case where onInstalled does not fire (e.g. a dev rebuild that
-// keeps the same version) — without it the helpers would never get registered.
+// Self-heal on every event-page load: drop any obsolete registrations, then add
+// whatever current script is missing. Registration persists across sessions, so
+// after convergence this is a single cheap read per wake. Covers the case where
+// onInstalled does not fire (e.g. a dev rebuild that keeps the same version).
 async function ensurePageWorldScripts() {
   try {
-    const have = await browser.scripting.getRegisteredContentScripts({
-      ids: PAGE_WORLD_SCRIPTS.map((s) => s.id),
-    });
+    const have = await browser.scripting.getRegisteredContentScripts();
     const haveIds = new Set(have.map((s) => s.id));
+    const obsolete = OBSOLETE_SCRIPT_IDS.filter((id) => haveIds.has(id));
+    if (obsolete.length) {
+      try {
+        await browser.scripting.unregisterContentScripts({ ids: obsolete });
+      } catch (e) {}
+    }
     const missing = PAGE_WORLD_SCRIPTS.filter((s) => !haveIds.has(s.id));
     if (missing.length) await browser.scripting.registerContentScripts(missing);
   } catch (e) {
-    // scripting API unavailable: fall back to <video>.volume (see above).
+    // scripting API unavailable: nothing to do here (volume still works via
+    // executeScript when a command arrives).
   }
 }
 
 browser.runtime.onInstalled.addListener(reregisterPageWorldScripts);
 ensurePageWorldScripts();
+
+// Persist volume by driving the page's real player API in the MAIN world. The
+// ISOLATED-world content script can only set <video>.volume, which YT Music
+// re-asserts its own level over within ~10–20 s; #movie_player.setVolume() is the
+// source of truth it honors. executeScript({world:"MAIN"}) is the one MAIN-world
+// path desktop Safari runs reliably, and setVolume is command-driven so injecting
+// on demand is fine. Works on both youtube.com and music.youtube.com (both expose
+// #movie_player). value is a 0.0–1.0 fraction.
+function persistVolume(tabId, value) {
+  if (tabId == null || typeof value !== "number" || !Number.isFinite(value)) return;
+  try {
+    const p = browser.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (frac) => {
+        const v = Math.min(1, Math.max(0, frac));
+        try {
+          const mp = document.getElementById("movie_player");
+          if (mp && typeof mp.setVolume === "function") {
+            if (typeof mp.unMute === "function") mp.unMute();
+            mp.setVolume(Math.round(v * 100));
+          }
+        } catch (e) {}
+        try {
+          const el = document.querySelector("video");
+          if (el) el.volume = v;
+        } catch (e) {}
+      },
+      args: [value],
+    });
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  } catch (e) {}
+}
 
 // tabId -> latest state object reported by that tab's content script.
 const tabStates = new Map();
@@ -123,6 +170,10 @@ function dispatchToActiveTab(cmd) {
     });
     if (p && typeof p.catch === "function") p.catch(() => {});
   } catch {}
+  // The content-script message above sets <video>.volume for instant feedback, but
+  // YT Music re-asserts over it; make the change stick by also driving the real
+  // player API in the MAIN world (the content script can't reach it).
+  if (cmd.action === "setVolume") persistVolume(activeTabId, cmd.value);
 }
 
 browser.runtime.onMessage.addListener((msg, sender) => {
