@@ -43,3 +43,17 @@ body.state-off :is(.state-on, .state-unknown) {
 button {
     font-size: 1em;
 }
+
+#artwork {
+    width: 160px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    /* The cover art is the one interactive image: double-click raises the YT tab. */
+    cursor: pointer;
+}
+
+#artwork[hidden] {
+    display: none;
+}

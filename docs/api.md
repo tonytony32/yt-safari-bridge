@@ -78,10 +78,13 @@ page content: escape on render.
 Body:
 
 ```json
-{ "action": "play | pause | toggle | next | previous | seek | setVolume", "value": 120.5 }
+{ "action": "play | pause | toggle | next | previous | seek | setVolume | focusTab", "value": 120.5 }
 ```
 
 `value` required for `seek` (seconds) and `setVolume` (0.0–1.0). Returns `202 {"queued": true}`.
+
+`focusTab` takes no `value`; it raises the active (playing) tab and its Safari window
+to the foreground. The container app issues it when the user double-clicks the cover art.
 
 Errors:
 
@@ -105,6 +108,7 @@ The queue is **bounded at 16 commands, dropping the oldest** on overflow.
     "canPrevious": true,
     "canSeek": true,
     "canSetVolume": true,
+    "canFocusTab": true,
     "hasFavorites": false,
     "hasQueue": false
   }

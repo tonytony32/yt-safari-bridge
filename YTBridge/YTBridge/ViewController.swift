@@ -62,6 +62,8 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
             }
         case "refresh":
             refreshBridgeStatus()
+        case "focus-tab":
+            sendFocusTab()
         default:
             break
         }
@@ -89,5 +91,21 @@ class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHan
             }
         }
         task.resume()
+    }
+
+    /// POST a focusTab command so the extension raises the playing YouTube tab.
+    /// The webview can't reach http://127.0.0.1 (WebKit blocks loopback from page
+    /// contexts), so the double-click on the cover art routes through here. The
+    /// command travels the same queue as playback commands and is dispatched on the
+    /// next Safari sync (≤1s). URLSession sets Host to 127.0.0.1:8976 and sends no
+    /// Origin, satisfying the bridge's security model.
+    private func sendFocusTab() {
+        guard let url = URL(string: "http://127.0.0.1:8976/v1/command") else { return }
+        var req = URLRequest(url: url, timeoutInterval: 2.0)
+        req.httpMethod = "POST"
+        req.setValue("close", forHTTPHeaderField: "Connection")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Data("{\"action\":\"focusTab\"}".utf8)
+        URLSession.shared.dataTask(with: req).resume()
     }
 }

@@ -27,11 +27,13 @@ document.querySelector("button.open-preferences").addEventListener("click", open
 function showBridge(data) {
     const serverLine = document.getElementById("server-line");
     const trackLine = document.getElementById("track-line");
+    const artwork = document.getElementById("artwork");
     if (!serverLine || !trackLine) return;
 
     if (!data || !data.up) {
         serverLine.textContent = "Bridge: offline (idle) — connection refused. Safari closed or no YouTube tab open.";
         trackLine.textContent = "";
+        setArtwork(artwork, null);
         return;
     }
 
@@ -42,10 +44,36 @@ function showBridge(data) {
         const where = s.source === "youtube_music" ? "YT Music" : "YouTube";
         trackLine.textContent =
             `${s.state === "playing" ? "▶︎" : "❚❚"} ${s.title || "(unknown)"} — ${s.artist || ""}  ·  ${where}`;
+        // artworkUrl is host-allowlisted at the bridge (i.ytimg.com / music.youtube.com
+        // / *.googleusercontent.com) and the CSP only permits those hosts, so a hostile
+        // value can't make the webview fetch an arbitrary URL.
+        setArtwork(artwork, s.artworkUrl);
     } else {
         serverLine.textContent = "Bridge: ✅ listening on 127.0.0.1:8976 — no active player (nothing playing).";
         trackLine.textContent = "";
+        setArtwork(artwork, null);
     }
+}
+
+// Show the cover art when we have a URL, hide it otherwise (avoids a broken-image
+// box). Only assigns src on change so we don't refetch every 2s poll.
+function setArtwork(img, url) {
+    if (!img) return;
+    if (typeof url === "string" && url.length > 0) {
+        if (img.src !== url) img.src = url;
+        img.hidden = false;
+    } else {
+        img.removeAttribute("src");
+        img.hidden = true;
+    }
+}
+
+// Double-click the cover art → ask the bridge to raise the playing YouTube tab.
+const artworkEl = document.getElementById("artwork");
+if (artworkEl) {
+    artworkEl.addEventListener("dblclick", () => {
+        webkit.messageHandlers.controller.postMessage("focus-tab");
+    });
 }
 
 function refreshBridge() {

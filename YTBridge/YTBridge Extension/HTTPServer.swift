@@ -254,6 +254,7 @@ final class HTTPServer {
 
     private static let validActions: Set<String> = [
         "play", "pause", "toggle", "next", "previous", "seek", "setVolume",
+        "focusTab",
     ]
 
     /// Self-describing capabilities so a generic consumer (arbiter) doesn't hard-code
@@ -265,6 +266,7 @@ final class HTTPServer {
         "canPrevious": true,
         "canSeek": true,
         "canSetVolume": true,
+        "canFocusTab": true,
         "hasFavorites": false,
         "hasQueue": false,
     ]
