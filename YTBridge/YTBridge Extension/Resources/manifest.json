@@ -3,7 +3,7 @@
   "name": "YT Bridge",
   "version": "0.1.0",
   "description": "Exposes YouTube / YouTube Music playback state to a local process (JellySleeve) via native messaging.",
-  "permissions": ["nativeMessaging"],
+  "permissions": ["nativeMessaging", "scripting"],
   "host_permissions": [
     "*://www.youtube.com/*",
     "*://music.youtube.com/*"
@@ -24,16 +24,6 @@
       "js": ["common.js", "content/ytmusic.js"],
       "run_at": "document_idle",
       "all_frames": false
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["content/page-volume.js"],
-      "matches": ["*://music.youtube.com/*"]
-    },
-    {
-      "resources": ["content/page-mediasession.js"],
-      "matches": ["*://www.youtube.com/*", "*://music.youtube.com/*"]
     }
   ]
 }
