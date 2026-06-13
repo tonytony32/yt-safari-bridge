@@ -61,10 +61,9 @@
     },
   };
 
-  // Page-world teardown helper: clears the macOS Now Playing card (the page's
-  // navigator.mediaSession, unreachable from this isolated world) when the tab or
-  // Safari closes, so the title + artwork don't linger after the app is gone.
-  __ytBridge.injectPageScript("content/page-mediasession.js");
-
+  // The page-world teardown helper (page-mediasession.js) clears the macOS Now
+  // Playing card on teardown; it runs in the MAIN world, registered by background.js
+  // as a MAIN-world content script (injecting it here with <script src> is blocked
+  // by YouTube's CSP).
   __ytBridge.run(adapter);
 })();
