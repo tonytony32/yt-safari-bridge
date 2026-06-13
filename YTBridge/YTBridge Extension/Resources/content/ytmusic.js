@@ -25,6 +25,14 @@
     ],
     next: ".next-button.ytmusic-player-bar",
     prev: ".previous-button.ytmusic-player-bar",
+    // The like control in the player bar. The <ytmusic-like-button-renderer>
+    // carries a `like-status` attribute ("LIKE" | "INDIFFERENT" | "DISLIKE") —
+    // the cheapest source of truth — while the thumb-up button lives under
+    // #button-shape-like. Clicking it toggles LIKE <-> INDIFFERENT.
+    likeRenderer: "ytmusic-player-bar ytmusic-like-button-renderer",
+    likeButton:
+      "ytmusic-player-bar ytmusic-like-button-renderer #button-shape-like button, " +
+      "ytmusic-player-bar ytmusic-like-button-renderer yt-button-shape:first-of-type button",
   };
 
   const text = (sel) => {
@@ -133,6 +141,21 @@
       const btn = document.querySelector(SELECTORS.prev);
       if (btn) btn.click();
       else if (video) video.currentTime = 0;
+    },
+
+    // Like state from the renderer's `like-status`; null when it isn't present.
+    readLiked() {
+      const r = document.querySelector(SELECTORS.likeRenderer);
+      if (!r) return null;
+      const status = r.getAttribute("like-status");
+      if (status === "LIKE") return true;
+      if (status === "INDIFFERENT" || status === "DISLIKE") return false;
+      return null;
+    },
+
+    clickLike() {
+      const btn = document.querySelector(SELECTORS.likeButton);
+      if (btn) btn.click();
     },
 
     // No setVolume hook here: YT Music re-asserts its own level over a bare
