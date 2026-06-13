@@ -255,11 +255,12 @@ final class HTTPServer {
     private static let validActions: Set<String> = [
         "play", "pause", "toggle", "next", "previous", "seek", "setVolume",
         "focusTab",
+        "like", "unlike", "toggleLike",
     ]
 
     /// Self-describing capabilities so a generic consumer (arbiter) doesn't hard-code
-    /// per-backend quirks. Constant for this source: full transport control, but no
-    /// favorites and no queue (YouTube / YouTube Music). See docs/playback-source.md.
+    /// per-backend quirks. Constant for this source: full transport control and
+    /// favorites (YouTube's "like"), but no queue. See docs/playback-source.md.
     private static let capabilities: [String: Bool] = [
         "canPlayPause": true,
         "canNext": true,
@@ -267,7 +268,7 @@ final class HTTPServer {
         "canSeek": true,
         "canSetVolume": true,
         "canFocusTab": true,
-        "hasFavorites": false,
+        "hasFavorites": true,
         "hasQueue": false,
     ]
 

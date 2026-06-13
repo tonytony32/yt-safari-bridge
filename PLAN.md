@@ -108,6 +108,7 @@ Base: `http://127.0.0.1:8976`. The port is a **hardcoded constant** (one Swift `
   "url": "https://music.youtube.com/watch?v=...",
   "artworkUrl": "https://...",
   "volume": 0.8,
+  "liked": false,
   "tabId": 42,
   "updatedAtMs": 1765432100123
 }
@@ -117,8 +118,8 @@ Base: `http://127.0.0.1:8976`. The port is a **hardcoded constant** (one Swift `
 
 ### `POST /v1/command`
 
-Body: `{"action": "play" | "pause" | "toggle" | "next" | "previous" | "seek" | "setVolume", "value": 120.5}`
-`value` required for `seek` (seconds) and `setVolume` (0.0–1.0). Returns `202 {"queued": true}`.
+Body: `{"action": "play" | "pause" | "toggle" | "next" | "previous" | "seek" | "setVolume" | "like" | "unlike" | "toggleLike", "value": 120.5}`
+`value` required for `seek` (seconds) and `setVolume` (0.0–1.0). `like`/`unlike` are idempotent, `toggleLike` flips. Returns `202 {"queued": true}`.
 Errors: `400` unknown action / missing or non-numeric value; `503 {"error": "safari_disconnected"}` if last sync is older than 3s (don't queue into the void); `409 {"error": "no_active_player"}` surfaced via subsequent state. The queue is **bounded at 16 commands, dropping the oldest** on overflow.
 
 ### `GET /v1/health`

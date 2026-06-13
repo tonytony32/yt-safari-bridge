@@ -51,6 +51,7 @@ arbitrary config files, so runtime configuration is not promised.
   "url": "https://music.youtube.com/watch?v=...",
   "artworkUrl": "https://...",
   "volume": 0.8,
+  "liked": false,
   "tabId": 42,
   "updatedAtMs": 1765432100123
 }
@@ -66,6 +67,10 @@ Field notes:
 - `artworkUrl`: `null` unless its host is allowlisted — `i.ytimg.com`,
   `music.youtube.com`, or any `*.googleusercontent.com` subdomain (`yt3`/`yt4`/`lh3`…
   are all Google-owned image CDNs). Anything off this list becomes `null`.
+- `liked`: the current item's "like / me gusta" state — `true` (liked), `false`
+  (not liked), or `null` (unknown: the like control wasn't found, e.g. selector
+  drift or a page without one). Toggle it with the `like`/`unlike`/`toggleLike`
+  commands below.
 
 `{"active": false}` is returned when nothing is playing/paused, **and also whenever the last
 sync from Safari is older than 3 s** (staleness rule — covers crashed tabs, closed Safari,
@@ -78,10 +83,17 @@ page content: escape on render.
 Body:
 
 ```json
-{ "action": "play | pause | toggle | next | previous | seek | setVolume | focusTab", "value": 120.5 }
+{ "action": "play | pause | toggle | next | previous | seek | setVolume | focusTab | like | unlike | toggleLike", "value": 120.5 }
 ```
 
-`value` required for `seek` (seconds) and `setVolume` (0.0–1.0). Returns `202 {"queued": true}`.
+`value` required for `seek` (seconds) and `setVolume` (0.0–1.0); ignored for the rest.
+Returns `202 {"queued": true}`.
+
+`like` / `unlike` / `toggleLike` drive YouTube's like button. `like` and `unlike` are
+**idempotent** — a no-op when the item is already in the target state (the bridge reads
+`liked` before acting); `toggleLike` always flips. Like a transport command, the result is
+best-effort and shows up as a changed `liked` in a later now-playing read, not in the
+command's `202`.
 
 `focusTab` takes no `value`; it raises the active (playing) tab and its Safari window
 to the foreground. The container app issues it when the user double-clicks the cover art.
@@ -109,7 +121,7 @@ The queue is **bounded at 16 commands, dropping the oldest** on overflow.
     "canSeek": true,
     "canSetVolume": true,
     "canFocusTab": true,
-    "hasFavorites": false,
+    "hasFavorites": true,
     "hasQueue": false
   }
 }
@@ -117,7 +129,7 @@ The queue is **bounded at 16 commands, dropping the oldest** on overflow.
 
 `safariLastPollMs` > ~3000 means the extension isn't syncing (Safari closed / extension
 disabled / no YT tab). `capabilities` is self-describing so a generic consumer doesn't hard-code
-per-backend quirks (this source has no favorites and no queue).
+per-backend quirks (this source has favorites — YouTube's "like" — but no queue).
 
 ## Generic source contract
 
