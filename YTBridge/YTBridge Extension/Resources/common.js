@@ -35,6 +35,9 @@
     "previous",
     "seek",
     "setVolume",
+    "like",
+    "unlike",
+    "toggleLike",
   ]);
 
   // Heartbeat cadence. Position is re-sent at these intervals so the consumer can
@@ -46,6 +49,29 @@
 
   const safe = (n) => (Number.isFinite(n) ? n : null);
   const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
+
+  // Read the current "liked / me gusta" state via the adapter, coerced to a strict
+  // tri-state: true (liked), false (not liked), or null (unknown — selector drift,
+  // or a page with no like control). Any adapter throw degrades to null so a DOM
+  // change never crashes the content script.
+  function readLiked(adapter) {
+    try {
+      if (typeof adapter.readLiked !== "function") return null;
+      const v = adapter.readLiked();
+      return v === true || v === false ? v : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Click the site's like control (the adapter owns the selector). The YouTube and
+  // YT Music like buttons are both toggles, so one click flips the state; the
+  // like/unlike/toggleLike command wrappers in executeCommand add idempotency.
+  function clickLike(adapter) {
+    try {
+      if (typeof adapter.clickLike === "function") adapter.clickLike();
+    } catch {}
+  }
 
   // Upgrade a thumbnail URL to a higher resolution where the host supports it,
   // so the consumer's overlay isn't fed a ~120px player-bar thumb. Applied after
@@ -130,6 +156,7 @@
       url: meta.url || location.href,
       artworkUrl: allowlistArtwork(meta.artworkUrl),
       volume: safe(video.volume),
+      liked: readLiked(adapter),
     };
   }
 
@@ -143,6 +170,7 @@
       a.album !== b.album ||
       a.artworkUrl !== b.artworkUrl ||
       a.volume !== b.volume ||
+      a.liked !== b.liked ||
       // a position jump (seek) of more than one heartbeat is a discrete event
       Math.abs((a.positionSec ?? 0) - (b.positionSec ?? 0)) > 1.5
     );
@@ -247,6 +275,18 @@
           try {
             adapter.previous(video);
           } catch {}
+          break;
+        // Favorites map to YouTube's "like". The button is a toggle, so the
+        // explicit like/unlike are made idempotent by reading current state first
+        // (no-op when already in the target state); toggleLike always flips.
+        case "like":
+          if (readLiked(adapter) !== true) clickLike(adapter);
+          break;
+        case "unlike":
+          if (readLiked(adapter) === true) clickLike(adapter);
+          break;
+        case "toggleLike":
+          clickLike(adapter);
           break;
       }
       // Confirm the resulting state quickly (instant feedback in now-playing).

@@ -30,6 +30,7 @@ A source reports, at any moment, either *idle* or an *active* snapshot:
 | `artworkUrl` | string \| null | Cover art **as a direct URL** (host-allowlisted at the source) | — |
 | `volume` | number 0.0–1.0 | Output volume | — |
 | `trackId` | string \| null | Stable id for the current item (bridge: `videoId`) | — |
+| `liked` | bool \| null | Favorite/like state of the current item; `null` = unknown | — |
 | `updatedAtMs` | number | Epoch ms of the last update (for position extrapolation + staleness) | — |
 
 **All string fields are untrusted content** (a video can be titled `<img onerror=…>`). Consumers
@@ -51,6 +52,10 @@ A source accepts these transport commands (the bridge takes them as
 | `next` / `previous` | — | Next / Previous |
 | `seek` | `value`: seconds (absolute) | SetPosition |
 | `setVolume` | `value`: 0.0–1.0 | Volume (set) |
+| `like` / `unlike` / `toggleLike` | — | (no MPRIS analogue — favorites extension) |
+
+`like` / `unlike` are idempotent (a no-op when already in the target state); `toggleLike`
+flips. The resulting `liked` shows up in a subsequent now-playing read.
 
 Commands are **best-effort and asynchronous**: they are accepted (`202`) and applied on the next
 sync; the resulting state shows up in a subsequent now-playing read. A consumer should treat the
@@ -68,15 +73,16 @@ The bridge reports this under `capabilities` in `GET /v1/health`:
   "canPrevious": true,
   "canSeek": true,
   "canSetVolume": true,
-  "hasFavorites": false,
+  "hasFavorites": true,
   "hasQueue": false
 }
 ```
 
 For the YouTube bridge these are **constant** (the same for `youtube` and `youtube_music`):
-full transport control, **no favorites, no queue**. A consumer hides the heart/queue UI when
-`hasFavorites`/`hasQueue` are false. (Jellyfin, by contrast, would report `hasFavorites: true`,
-`hasQueue: true`.)
+full transport control and favorites (YouTube's "like"), but **no queue**. A consumer hides
+the heart/queue UI when `hasFavorites`/`hasQueue` are false; here it shows the favorite
+affordance and wires it to `like`/`unlike`/`toggleLike` + the `liked` field. (Jellyfin
+reports both `hasFavorites: true` and `hasQueue: true`.)
 
 ## 4. Activeness & staleness (how a consumer knows a source is "live")
 
