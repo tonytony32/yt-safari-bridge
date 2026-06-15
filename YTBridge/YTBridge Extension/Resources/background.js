@@ -246,3 +246,17 @@ browser.tabs.onRemoved.addListener((tabId) => {
   // Final sync so the consumer sees the player go away (may be {active:false}).
   syncNative();
 });
+
+// Bind the bridge proactively at browser launch. The native HTTP server lives in
+// the extension process and only binds as a side effect of a sync (the handler's
+// beginRequest -> HTTPServer.ensureRunning()). Nothing drove a sync at startup, so
+// after every Safari launch the socket stayed down — JellySleeve saw connection
+// refused ("idle") — until a YouTube tab happened to push state, or the user
+// toggled the extension off/on to force a content-script re-inject. onStartup wakes
+// this non-persistent event page once per browser session (the Apple/MDN-supported
+// hook for exactly this), so we sync straight away: the round trip reports
+// {active:false} (no tab yet) and binds the listener, letting JellySleeve connect
+// immediately even before any YouTube tab is open.
+browser.runtime.onStartup.addListener(() => {
+  syncNative();
+});
