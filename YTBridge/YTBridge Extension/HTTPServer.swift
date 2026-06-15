@@ -59,7 +59,33 @@ final class HTTPServer {
     func ensureRunning() {
         lock.lock()
         defer { lock.unlock() }
-        guard !started else { return }
+        // Trust only a listener that is actually up (or still coming up). The old
+        // `guard !started` relied on a cached flag, and that is what wedged the
+        // bridge CLOSED: when macOS reclaims the listening socket while this
+        // extension process is suspended, the .cancelled/.failed callback that
+        // resets `started` may never run, so every later sync saw started==true and
+        // early-returned on a dead socket — the "socket CLOSED while the handler is
+        // still alive" flakiness. Read the listener's real state instead and
+        // rebuild anything that is not live, so the next sync revives a dead socket.
+        if started, let l = listener {
+            switch l.state {
+            case .setup, .waiting, .ready:
+                return
+            default:
+                break // .failed / .cancelled — fall through and rebind
+            }
+        }
+        rebindLocked()
+    }
+
+    /// Cancel any stale listener and bind a fresh one. Caller must hold `lock`.
+    /// The cancelled listener's later .cancelled callback is harmless: handleListenerDown
+    /// only reacts to whichever listener is still current, so it won't tear down
+    /// the replacement we start here.
+    private func rebindLocked() {
+        let old = listener
+        listener = nil
+        old?.cancel()
         started = true
         startListenerLocked()
     }
@@ -75,16 +101,16 @@ final class HTTPServer {
 
         do {
             let l = try NWListener(using: params)
-            l.stateUpdateHandler = { [weak self] state in
+            l.stateUpdateHandler = { [weak self, weak l] state in
                 switch state {
                 case .ready:
                     self?.log.notice("listener ready on 127.0.0.1:\(Self.port, privacy: .public)")
                 case .failed(let e):
                     self?.log.error("listener failed: \(String(describing: e), privacy: .public)")
-                    self?.handleListenerDown()
+                    self?.handleListenerDown(l)
                 case .cancelled:
                     self?.log.notice("listener cancelled")
-                    self?.handleListenerDown()
+                    self?.handleListenerDown(l)
                 default:
                     break
                 }
@@ -100,19 +126,19 @@ final class HTTPServer {
         }
     }
 
-    /// A listener went down (failed / cancelled by the system). Drop it and
-    /// schedule a revive; the next sync's `ensureRunning()` would revive it too,
-    /// but the timer covers the case where syncs have paused. `guard wasStarted`
-    /// dedups the `.cancelled` our own `cancel()` re-fires, so there's no loop.
-    private func handleListenerDown() {
+    /// A listener went down (failed, or cancelled by the system or by a rebind).
+    /// React only if it is still the current listener: a listener we already
+    /// replaced in `rebindLocked()` fires its `.cancelled` here too, and acting on
+    /// that would tear down its freshly-started replacement. Drop the current one
+    /// and schedule a revive; the next sync's `ensureRunning()` would revive it too,
+    /// but the timer covers the case where syncs have paused.
+    private func handleListenerDown(_ down: NWListener?) {
         lock.lock()
-        let wasStarted = started
+        guard listener === down else { lock.unlock(); return }
         started = false
-        let old = listener
         listener = nil
         lock.unlock()
-        guard wasStarted else { return }
-        old?.cancel()
+        down?.cancel()
         connQueue.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.ensureRunning()
         }
