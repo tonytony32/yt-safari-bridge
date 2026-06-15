@@ -73,6 +73,47 @@
     } catch {}
   }
 
+  // YouTube video thumbnails come in two aspect ratios. The 4:3 variants
+  // (default/hqdefault/sddefault) letterbox the 16:9 frame with baked-in black
+  // bars top and bottom — a square-cropped consumer overlay keeps the full height,
+  // so those bars survive into the now-playing art. The 16:9 variants are clean:
+  //   mqdefault   320×180  always present
+  //   maxresdefault 1280×720  sharp, but only for HD uploads (404s otherwise)
+  // We serve mqdefault immediately (never bars, never a broken cover) and probe
+  // maxresdefault once per video; if it exists we upgrade and re-push the snapshot.
+  const ytThumbVariant = new Map(); // videoId -> "maxresdefault" | "mqdefault"
+  const ytThumbProbing = new Set(); // videoIds with an in-flight probe
+  let onArtworkUpgraded = null; // set by run() to re-emit when a probe upgrades
+
+  function probeMaxres(videoId) {
+    if (ytThumbProbing.has(videoId)) return;
+    ytThumbProbing.add(videoId);
+    const img = new Image();
+    img.onload = () => {
+      ytThumbProbing.delete(videoId);
+      // A present maxresdefault is 1280 wide; guard against any placeholder.
+      if (img.naturalWidth >= 1000) {
+        ytThumbVariant.set(videoId, "maxresdefault");
+        if (onArtworkUpgraded) onArtworkUpgraded();
+      } else {
+        ytThumbVariant.set(videoId, "mqdefault");
+      }
+    };
+    img.onerror = () => {
+      ytThumbProbing.delete(videoId);
+      ytThumbVariant.set(videoId, "mqdefault"); // no maxres: mqdefault stands.
+    };
+    img.src = "https://i.ytimg.com/vi/" + videoId + "/maxresdefault.jpg";
+  }
+
+  function ytThumbName(videoId) {
+    if (!videoId) return "mqdefault";
+    const known = ytThumbVariant.get(videoId);
+    if (known) return known;
+    probeMaxres(videoId);
+    return "mqdefault"; // safe 16:9 default until the probe upgrades it
+  }
+
   // Upgrade a thumbnail URL to a higher resolution where the host supports it,
   // so the consumer's overlay isn't fed a ~120px player-bar thumb. Applied after
   // the host allowlist (below), so it only ever rewrites trusted hosts.
@@ -84,12 +125,14 @@
         .replace(/=w\d+-h\d+/, "=w544-h544")
         .replace(/=s\d+/, "=s544");
     }
-    // YouTube video thumbnails (i.ytimg.com/vi/<id>/<name>.jpg): sddefault (640)
-    // is near-universally present and a clear step up from hqdefault (480).
+    // YouTube video thumbnails (i.ytimg.com/vi/<id>/<name>.jpg): pick a 16:9
+    // variant (see probeMaxres) so no letterbox bars leak into the cover art.
     if (u.hostname === "i.ytimg.com") {
+      const m = u.pathname.match(/\/vi\/([^/]+)\//);
+      const variant = ytThumbName(m && m[1]);
       return u.href.replace(
         /\/(?:default|mqdefault|hqdefault|sddefault|maxresdefault)\.jpg/,
-        "/sddefault.jpg"
+        "/" + variant + ".jpg"
       );
     }
     return u.href;
@@ -198,6 +241,10 @@
         push(s);
       }
     }
+
+    // A maxresdefault probe resolving mid-playback bumps the cover from mqdefault
+    // to the sharp variant; re-emit so the consumer swaps in the upgraded art.
+    onArtworkUpgraded = maybePushNow;
 
     function bindVideo() {
       const video = document.querySelector("video");
