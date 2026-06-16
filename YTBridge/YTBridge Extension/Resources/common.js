@@ -317,6 +317,17 @@
       { capture: true }
     );
 
+    // Announce presence the moment we load on a YouTube page, even with nothing
+    // playing. The background only does a native sync (which binds the local HTTP
+    // server) in response to a push; tick() stays silent when there's no active
+    // media, so without this an open-but-idle YouTube tab would never push and the
+    // server would never come up — JellySleeve couldn't connect until playback
+    // actually started. Pushing {active:false} here wakes the background once so it
+    // binds immediately on page open; the background's alarms keepalive then keeps
+    // the socket warm. {active:false} doesn't steal the active-tab slot from a tab
+    // that's really playing (see background.js onMessage rising-edge logic).
+    push({ active: false });
+
     tick();
   }
 

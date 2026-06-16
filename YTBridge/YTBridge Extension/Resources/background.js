@@ -81,7 +81,10 @@ async function ensurePageWorldScripts() {
   }
 }
 
-browser.runtime.onInstalled.addListener(reregisterPageWorldScripts);
+browser.runtime.onInstalled.addListener(() => {
+  reregisterPageWorldScripts();
+  ensureKeepalive();
+});
 ensurePageWorldScripts();
 
 // Persist volume by driving the page's real player API in the MAIN world. The
@@ -258,5 +261,45 @@ browser.tabs.onRemoved.addListener((tabId) => {
 // {active:false} (no tab yet) and binds the listener, letting JellySleeve connect
 // immediately even before any YouTube tab is open.
 browser.runtime.onStartup.addListener(() => {
+  ensureKeepalive();
   syncNative();
 });
+
+// Keep the bridge socket warm independent of playback. The native HTTP server lives
+// in the extension's handler process, which macOS reaps when idle; only a native
+// sync revives it (beginRequest -> HTTPServer.ensureRunning). Content-script
+// heartbeats drive syncs ONLY while a YouTube tab is actively pushing state — so
+// with Safari open but nothing playing, the YT tab paused/idle (the silent `else`
+// branch in common.js's tick() never pushes), or the tab throttled in the
+// background, no sync happens: the handler process is reaped, the socket dies, and
+// JellySleeve sees "connection refused" even though a YouTube tab is right there.
+//
+// A periodic alarm wakes this non-persistent event page on a cadence that does NOT
+// depend on any tab or on playback; each wake does a sync that re-binds the listener
+// via ensureRunning(). alarms is the one timer Safari honors for a suspended event
+// page (setInterval/setTimeout are not — that's why the background owns no timers
+// elsewhere). Any gap between ticks degrades only to the documented "connection
+// refused == idle" contract (docs/api.md), never to stale state, because the
+// StateStore staleness rule already reports {active:false} after 3 s. Safari clamps
+// periodInMinutes to a floor (~0.5–1 min), so this is cheap.
+const KEEPALIVE_ALARM = "ytbridge-keepalive";
+
+function ensureKeepalive() {
+  try {
+    // Idempotent: creating an alarm with an existing name replaces it. Alarms
+    // persist across event-page unloads, so re-creating on each load is harmless.
+    browser.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
+  } catch (e) {
+    // alarms API unavailable: fall back to playback-driven syncs only (old behavior).
+  }
+}
+
+if (browser.alarms && browser.alarms.onAlarm) {
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm && alarm.name === KEEPALIVE_ALARM) syncNative();
+  });
+}
+
+// Arm on first load of the event page (covers enable/reload, where onStartup and
+// onInstalled may not both fire).
+ensureKeepalive();
