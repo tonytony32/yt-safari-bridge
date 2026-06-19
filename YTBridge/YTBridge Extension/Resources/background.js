@@ -159,7 +159,7 @@ function pickFallbackActive() {
   return playing ?? last;
 }
 
-// The state JellySleeve should see, with tabId attached. {active:false} when idle.
+// The state JellyBeat should see, with tabId attached. {active:false} when idle.
 function activeState() {
   if (activeTabId != null && tabStates.has(activeTabId)) {
     return Object.assign({}, tabStates.get(activeTabId), { tabId: activeTabId });
@@ -253,12 +253,12 @@ browser.tabs.onRemoved.addListener((tabId) => {
 // Bind the bridge proactively at browser launch. The native HTTP server lives in
 // the extension process and only binds as a side effect of a sync (the handler's
 // beginRequest -> HTTPServer.ensureRunning()). Nothing drove a sync at startup, so
-// after every Safari launch the socket stayed down — JellySleeve saw connection
+// after every Safari launch the socket stayed down — JellyBeat saw connection
 // refused ("idle") — until a YouTube tab happened to push state, or the user
 // toggled the extension off/on to force a content-script re-inject. onStartup wakes
 // this non-persistent event page once per browser session (the Apple/MDN-supported
 // hook for exactly this), so we sync straight away: the round trip reports
-// {active:false} (no tab yet) and binds the listener, letting JellySleeve connect
+// {active:false} (no tab yet) and binds the listener, letting JellyBeat connect
 // immediately even before any YouTube tab is open.
 browser.runtime.onStartup.addListener(() => {
   ensureKeepalive();
@@ -272,7 +272,7 @@ browser.runtime.onStartup.addListener(() => {
 // with Safari open but nothing playing, the YT tab paused/idle (the silent `else`
 // branch in common.js's tick() never pushes), or the tab throttled in the
 // background, no sync happens: the handler process is reaped, the socket dies, and
-// JellySleeve sees "connection refused" even though a YouTube tab is right there.
+// JellyBeat sees "connection refused" even though a YouTube tab is right there.
 //
 // A periodic alarm wakes this non-persistent event page on a cadence that does NOT
 // depend on any tab or on playback; each wake does a sync that re-binds the listener

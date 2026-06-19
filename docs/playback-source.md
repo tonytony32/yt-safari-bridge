@@ -1,13 +1,13 @@
 # The `PlaybackSource` contract (vendor-neutral)
 
 This document defines a small, **vendor-neutral playback-source contract**: a normalized
-"now playing + remote control" interface that a consumer (e.g. JellySleeve) can arbitrate over
+"now playing + remote control" interface that a consumer (e.g. JellyBeat) can arbitrate over
 **without knowing which backend it is talking to**.
 
 `yt-safari-bridge` is **one implementation** of this contract, served over HTTP at
 `http://127.0.0.1:8976` (see [`api.md`](api.md) for the wire details). Jellyfin — or any other
 backend — is just another implementation that maps onto the same normalized model. The point of
-this file is to let JellySleeve code its source-arbitration logic against **this contract**,
+this file is to let JellyBeat code its source-arbitration logic against **this contract**,
 not against the YouTube bridge or Jellyfin specifically.
 
 The model is deliberately aligned with **MPRIS** (the de-facto cross-player standard; see the
@@ -97,7 +97,7 @@ reports both `hasFavorites: true` and `hasQueue: true`.)
 
 ## 5. Arbitration guidance (for a multi-source consumer)
 
-A consumer with several sources (JellySleeve = Jellyfin + this bridge) decides which one drives
+A consumer with several sources (JellyBeat = Jellyfin + this bridge) decides which one drives
 the UI:
 
 - **Automatic**: pick the source that is currently *active* (per §4). If more than one is active,
