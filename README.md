@@ -6,7 +6,7 @@ API on `127.0.0.1`, and accepts playback commands (play/pause/next/prev/seek/vol
 
 Personal tool. macOS 14+, Safari 17+. No App Store.
 
-The HTTP contract that consumers (JellySleeve) code against lives in
+The HTTP contract that consumers (JellyBeat) code against lives in
 [`docs/api.md`](docs/api.md). The full design rationale and Safari-specific constraints are
 in [`PLAN.md`](PLAN.md).
 
@@ -14,7 +14,7 @@ in [`PLAN.md`](PLAN.md).
 
 Content scripts push state on change + heartbeat → background relay →
 `SafariWebExtensionHandler` (Swift) holds latest state + a bounded command queue →
-HTTP server bound to `127.0.0.1:8976` inside the extension process → JellySleeve polls
+HTTP server bound to `127.0.0.1:8976` inside the extension process → JellyBeat polls
 `GET /v1/now-playing` and `POST /v1/command`.
 
 The port `8976` is a **hardcoded constant**; changing it means rebuilding.
@@ -33,7 +33,7 @@ The port `8976` is a **hardcoded constant**; changing it means rebuilding.
 - **Phase 4 — done.** Container-app status UI (server up/idle + current track), multi-tab
   arbitration hardening, docs handoff.
 
-The HTTP API is live and stable on `127.0.0.1:8976`; JellySleeve can integrate against
+The HTTP API is live and stable on `127.0.0.1:8976`; JellyBeat can integrate against
 [`docs/api.md`](docs/api.md) now.
 
 ## Repo layout
@@ -42,7 +42,7 @@ The HTTP API is live and stable on `127.0.0.1:8976`; JellySleeve can integrate a
 yt-safari-bridge/
 ├── PLAN.md / README.md
 ├── docs/
-│   ├── api.md            ← HTTP contract for JellySleeve
+│   ├── api.md            ← HTTP contract for JellyBeat
 │   └── console-test.js   ← paste into Safari Web Inspector to validate the scrapers
 └── YTBridge/
     ├── YTBridge.xcodeproj

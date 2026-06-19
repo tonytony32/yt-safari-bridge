@@ -1,6 +1,6 @@
-# Plan: `yt-safari-bridge` — Safari extension exposing YouTube / YouTube Music playback to JellySleeve
+# Plan: `yt-safari-bridge` — Safari extension exposing YouTube / YouTube Music playback to JellyBeat
 
-> Execution plan for Claude Code. Build in a **new standalone repo** (`yt-safari-bridge`). JellySleeve is a separate local process that will consume the HTTP API defined here.
+> Execution plan for Claude Code. Build in a **new standalone repo** (`yt-safari-bridge`). JellyBeat is a separate local process that will consume the HTTP API defined here.
 > Rev 3: architecture + security audited. Sync is content-script-driven (Safari unloads background timers), socket bind is de-risked in Phase 1, the localhost API is hardened against drive-by browser requests, and all scraped strings are treated as untrusted content.
 
 ## Goal
@@ -8,7 +8,7 @@
 A Safari Web Extension (plus its required macOS containing app) that:
 
 1. Detects what is playing on `youtube.com` and `music.youtube.com` (title, artist, artwork, position, state).
-2. Exposes that state via a local HTTP API on `127.0.0.1` so JellySleeve can read it.
+2. Exposes that state via a local HTTP API on `127.0.0.1` so JellyBeat can read it.
 3. Accepts commands over the same API (play/pause, next/previous, seek, volume) and executes them in the tab.
 
 Personal tool. No App Store. macOS 14+, Safari 17+.
@@ -23,17 +23,17 @@ YouTube tab ──content script: push state on change + heartbeat──▶ back
                                                 │  StateStore: latest state + bounded command queue
                                                 └─▶ HTTP server on 127.0.0.1:8976 (Host-validated, no CORS)
                                                       ▲
-                                                JellySleeve (GET state / POST commands)
+                                                JellyBeat (GET state / POST commands)
 ```
 
 Key constraints that dictate this design — do NOT "simplify" around them:
 
 - A JS extension **cannot open a server socket**. The native side must host the API.
-- Safari **blocks `fetch`/WebSocket from extension contexts to `http://localhost`** (mixed content / CSP; WebKit does not exempt loopback — see webkit.org bug 171934). So the extension cannot push directly to a JellySleeve-owned server. Native messaging is the supported channel.
+- Safari **blocks `fetch`/WebSocket from extension contexts to `http://localhost`** (mixed content / CSP; WebKit does not exempt loopback — see webkit.org bug 171934). So the extension cannot push directly to a JellyBeat-owned server. Native messaging is the supported channel.
 - Safari native messaging only talks to the extension's **own containing app**, and content scripts cannot call it directly — they must relay through the background script.
 - **Sync is driven by content scripts, never by background timers.** Safari unloads non-persistent background pages after idle and `setInterval` callbacks are NOT invoked after unload (Apple-documented). Incoming `runtime.sendMessage` calls DO wake the background page. So: content scripts push state; the background's `onMessage` handler relays each push via `sendNativeMessage` and dispatches whatever commands come back in the reply. One round trip carries both directions. No keep-alive hacks.
 - Push cadence (content script, which lives as long as its tab): immediately on change (play/pause/seek/track change), plus heartbeat every **500ms while playing, 1s while paused**, silent when the tab has no media. Command latency ≤ cadence — fine for remote control.
-- The HTTP server runs **inside the extension handler process** (singleton in the principal class), not in the containing app. Syncs keep it warm while a YT tab is open; if the process is reaped, the next sync respawns it and the server restarts lazily. **This assumption is validated by a 3-line bind spike in Phase 1 before any HTTP code is written.** When Safari is closed or no YT tab exists, the server may be gone entirely: JellySleeve must treat **connection refused as "bridge idle"**, not as an error.
+- The HTTP server runs **inside the extension handler process** (singleton in the principal class), not in the containing app. Syncs keep it warm while a YT tab is open; if the process is reaped, the next sync respawns it and the server restarts lazily. **This assumption is validated by a 3-line bind spike in Phase 1 before any HTTP code is written.** When Safari is closed or no YT tab exists, the server may be gone entirely: JellyBeat must treat **connection refused as "bridge idle"**, not as an error.
 - The containing app is just the install vehicle + status window (extension enabled? server up?).
 - Background script: manifest v3 with `"background": {"scripts": [...]}` (background **page**, not service worker — Safari supports it and service workers have known native-messaging quirks). The background is a stateless-ish event relay; it does not rely on staying loaded.
 
@@ -43,7 +43,7 @@ Move the HTTP server into the containing app (menu bar, `LSUIElement`); share st
 
 ### Future variant (optional, after the scrapers stabilize — do not build now)
 
-Fold the extension into JellySleeve as its containing app and replace HTTP with App Group `UserDefaults` + Darwin notifications: removes the entire network attack surface (no listener, no drive-by, no local-process snooping). It is a transport-only migration (~1-2 days): manifest, content scripts, background relay and `StateStore` move unchanged; Safari will see a new extension (new bundle id, re-enable permissions manually). The `PlaybackSource` protocol in JellySleeve (Phase 4) is what keeps this swap cheap.
+Fold the extension into JellyBeat as its containing app and replace HTTP with App Group `UserDefaults` + Darwin notifications: removes the entire network attack surface (no listener, no drive-by, no local-process snooping). It is a transport-only migration (~1-2 days): manifest, content scripts, background relay and `StateStore` move unchanged; Safari will see a new extension (new bundle id, re-enable permissions manually). The `PlaybackSource` protocol in JellyBeat (Phase 4) is what keeps this swap cheap.
 
 ## Repo layout
 
@@ -53,7 +53,7 @@ Phase 0 (pure JS, before Xcode exists):
 yt-safari-bridge/
 ├── PLAN.md                  ← this file
 ├── README.md
-├── docs/api.md              ← contract for JellySleeve
+├── docs/api.md              ← contract for JellyBeat
 └── extension/
     ├── manifest.json
     ├── background.js
@@ -78,14 +78,14 @@ yt-safari-bridge/
         └── Resources/                 ← canonical manifest.json + JS
 ```
 
-## HTTP API contract (v1) — what JellySleeve codes against
+## HTTP API contract (v1) — what JellyBeat codes against
 
 Base: `http://127.0.0.1:8976`. The port is a **hardcoded constant** (one Swift `let` + README note). Changing it means rebuilding — the sandboxed extension process cannot read user env vars or arbitrary config files, so do not promise runtime configuration.
 
 ### Security model (implement exactly)
 
 - Bind strictly to loopback (`127.0.0.1`). Never `0.0.0.0`.
-- **No CORS headers, ever.** JellySleeve is a native process; it does not need CORS, and emitting `Access-Control-Allow-Origin` would let any webpage you visit read your listening state.
+- **No CORS headers, ever.** JellyBeat is a native process; it does not need CORS, and emitting `Access-Control-Allow-Origin` would let any webpage you visit read your listening state.
 - **Reject with 403 any request whose `Host` header is not exactly `127.0.0.1:8976`** — defeats DNS rebinding (attacker page on `evil.com` resolving to 127.0.0.1 sends `Host: evil.com`).
 - **Reject with 403 any request bearing an `Origin` header** — browsers always attach it to cross-origin requests; native clients don't send it. Together with the Host check this closes the drive-by browser vector.
 - **Server limits:** max request size 8 KB (reject larger with 413), read timeout 5 s, max 8 concurrent connections, connection close after every response. Add `X-Content-Type-Options: nosniff` to all responses.
@@ -114,7 +114,7 @@ Base: `http://127.0.0.1:8976`. The port is a **hardcoded constant** (one Swift `
 }
 ```
 
-`{"active": false}` when nothing is playing/paused, **and also whenever the last sync from Safari is older than 3s** (staleness rule — covers crashed tabs, closed Safari, disabled extension). JellySleeve extrapolates position between polls using `updatedAtMs`, and treats connection refused the same as `active: false`. `artworkUrl` is `null` unless its host is allowlisted (`i.ytimg.com`, `lh3.googleusercontent.com`, `music.youtube.com`). All string fields are untrusted page content: escape on render.
+`{"active": false}` when nothing is playing/paused, **and also whenever the last sync from Safari is older than 3s** (staleness rule — covers crashed tabs, closed Safari, disabled extension). JellyBeat extrapolates position between polls using `updatedAtMs`, and treats connection refused the same as `active: false`. `artworkUrl` is `null` unless its host is allowlisted (`i.ytimg.com`, `lh3.googleusercontent.com`, `music.youtube.com`). All string fields are untrusted page content: escape on render.
 
 ### `POST /v1/command`
 
@@ -126,7 +126,7 @@ Errors: `400` unknown action / missing or non-numeric value; `503 {"error": "saf
 
 `{"ok": true, "safariLastPollMs": 312, "version": "0.1.0"}` — `safariLastPollMs` > ~3000 means the extension isn't syncing (Safari closed / extension disabled / no YT tab).
 
-Write this contract into `docs/api.md` verbatim in Phase 0 so JellySleeve work can start in parallel.
+Write this contract into `docs/api.md` verbatim in Phase 0 so JellyBeat work can start in parallel.
 
 ## Phases
 
@@ -202,13 +202,13 @@ Manual steps (Claude Code must pause and ask): enable the extension in Safari Se
 2. Edge cases: unknown action → 400; seek beyond duration → clamp; Safari closed → 503; queue overflow → oldest dropped.
 3. **Acceptance (curl):** `toggle` pauses/resumes within ~1s (also from paused state, where cadence is 1s); `next` advances track on YT Music; `seek` moves the playhead; `setVolume 0.2` audibly lowers volume; same on a youtube.com tab; with Safari quit, `command` returns 503.
 
-### Phase 4 — Hardening + handoff to JellySleeve
+### Phase 4 — Hardening + handoff to JellyBeat
 
 1. Multi-tab arbitration test: two tabs playing → most recent wins; close it → previous becomes active (verify the `onRemoved` final sync).
 2. Tolerate selector failures without crashing the content script; verify artwork is the high-res variant on YT Music.
 3. Status UI in the containing app window: extension syncing? server listening? last track seen. (Keep trivial — text labels, refresh button.)
 4. README: build instructions, manual Safari steps, the hardcoded port (and that changing it = rebuild), troubleshooting via `health` + "connection refused means idle".
-5. `docs/api.md` final pass — this is the integration contract; JellySleeve then adds a `YTBridgeSource` that polls `/v1/now-playing` every second and POSTs commands, **behind a `PlaybackSource` protocol** so a later transport swap (e.g. the App Group variant below) stays local to one type. The contract must state that consumers escape all string fields on render.
+5. `docs/api.md` final pass — this is the integration contract; JellyBeat then adds a `YTBridgeSource` that polls `/v1/now-playing` every second and POSTs commands, **behind a `PlaybackSource` protocol** so a later transport swap (e.g. the App Group variant below) stays local to one type. The contract must state that consumers escape all string fields on render.
 
 ## Decisions already made (don't reopen)
 
@@ -226,12 +226,12 @@ Manual steps (Claude Code must pause and ask): enable the extension in Safari Se
 | Risk | Mitigation |
 |---|---|
 | Background page unloaded by Safari | By design: no background timers; content-script messages and `tabs.onRemoved` wake it |
-| Extension handler process reaped | Next sync respawns it; server restarts lazily; state re-syncs ≤1s; JellySleeve treats refused connections as idle |
+| Extension handler process reaped | Next sync respawns it; server restarts lazily; state re-syncs ≤1s; JellyBeat treats refused connections as idle |
 | `NWListener` blocked in extension sandbox | Phase 1 spike detects it before HTTP work; documented containing-app fallback |
 | YT/YTM DOM selectors change | Centralized `SELECTORS`, defensive nulls, `document.title` fallback |
 | Livestream `Infinity`/`NaN` crashes JSON serialization | Sanitized to `null` in content script (Phase 0 step 5) |
 | MV3 service-worker quirks in Safari | Background **page** (`"scripts"`); MV2 fallback |
-| Port 8976 occupied (e.g. STP) | Log + continue without server; health absent → JellySleeve shows "bridge offline"; port is a documented constant |
+| Port 8976 occupied (e.g. STP) | Log + continue without server; health absent → JellyBeat shows "bridge offline"; port is a documented constant |
 | Drive-by webpage hits the API | No CORS + `Host` validation + `Origin` rejection (403); residual subresource GETs are unreadable to the attacker |
 | Malicious video title reaches consumer UIs | Contract marks all strings untrusted (escape on render); `artworkUrl` allowlisted at source |
 | Local process reads listening state / sends commands | Accepted v1 (documented); bearer token or App Group variant later |

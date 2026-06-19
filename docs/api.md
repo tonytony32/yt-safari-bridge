@@ -1,6 +1,6 @@
 # YT Bridge HTTP API contract (v1)
 
-This is the integration contract for JellySleeve. Base URL:
+This is the integration contract for JellyBeat. Base URL:
 
 ```
 http://127.0.0.1:8976
@@ -13,7 +13,7 @@ arbitrary config files, so runtime configuration is not promised.
 ## Security model (implemented exactly)
 
 - Binds strictly to loopback (`127.0.0.1`). Never `0.0.0.0`.
-- **No CORS headers, ever.** JellySleeve is a native process; it does not need CORS, and
+- **No CORS headers, ever.** JellyBeat is a native process; it does not need CORS, and
   emitting `Access-Control-Allow-Origin` would let any webpage you visit read your
   listening state.
 - **Rejects with `403` any request whose `Host` header is not exactly `127.0.0.1:8976`** —
@@ -74,7 +74,7 @@ Field notes:
 
 `{"active": false}` is returned when nothing is playing/paused, **and also whenever the last
 sync from Safari is older than 3 s** (staleness rule — covers crashed tabs, closed Safari,
-disabled extension). JellySleeve extrapolates position between polls using `updatedAtMs`, and
+disabled extension). JellyBeat extrapolates position between polls using `updatedAtMs`, and
 treats **connection refused the same as `active: false`**. All string fields are untrusted
 page content: escape on render.
 
@@ -134,7 +134,7 @@ per-backend quirks (this source has favorites — YouTube's "like" — but no qu
 ## Generic source contract
 
 This API is one implementation of a **vendor-neutral `PlaybackSource` contract** — see
-[`playback-source.md`](playback-source.md). Code consumers (e.g. JellySleeve's source arbiter)
+[`playback-source.md`](playback-source.md). Code consumers (e.g. JellyBeat's source arbiter)
 against that normalized model + MPRIS mapping, not against YouTube-specific shapes.
 
 ## Consumer guidance
