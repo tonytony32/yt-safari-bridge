@@ -167,7 +167,42 @@ function activeState() {
   return { active: false };
 }
 
+// User on/off switch (popup.js writes storage.local `bridgeEnabled`, default ON). When OFF we
+// stop forwarding state to the container app, so JellyBeat goes idle within the 3s staleness
+// window — and we push one {active:false} on the off-transition so it drops to idle at once.
+// The socket stays bound (the headless agent owns it); this governs only whether playback is
+// exposed, not whether the bridge process runs. The background is non-persistent, so re-read
+// the value on every load.
+const BRIDGE_ENABLED_KEY = "bridgeEnabled";
+let bridgeEnabled = true;
+
+browser.storage.local
+  .get(BRIDGE_ENABLED_KEY)
+  .then((res) => {
+    bridgeEnabled = res[BRIDGE_ENABLED_KEY] !== false; // default ON when unset
+  })
+  .catch(() => {});
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes[BRIDGE_ENABLED_KEY]) return;
+  const nowEnabled = changes[BRIDGE_ENABLED_KEY].newValue !== false;
+  const wasEnabled = bridgeEnabled;
+  bridgeEnabled = nowEnabled;
+  if (wasEnabled && !nowEnabled) {
+    // Off: tell the app we're gone now so JellyBeat drops to idle without waiting out the 3s.
+    try {
+      browser.runtime.sendNativeMessage("application.id", {
+        type: "sync",
+        state: { active: false },
+      });
+    } catch (e) {}
+  } else if (!wasEnabled && nowEnabled) {
+    syncNative(); // On: resume immediately.
+  }
+});
+
 async function syncNative() {
+  if (!bridgeEnabled) return; // user switched the bridge off in the popup
   try {
     const reply = await browser.runtime.sendNativeMessage("application.id", {
       type: "sync",

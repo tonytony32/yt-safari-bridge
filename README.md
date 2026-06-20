@@ -97,6 +97,11 @@ grant site access (below). There's no app UI by design — check status with
 `GET /v1/health` (JellyBeat surfaces it); the bridge is up whenever the agent is running,
 regardless of Safari. Manage/stop it from System Settings → Login Items.
 
+The extension's toolbar popup has a **Puente a JellyBeat** on/off switch (default on): turning
+it off stops forwarding your playback (JellyBeat goes idle within 3 s) without uninstalling
+anything. The socket stays bound — "off" means "don't expose my playback", not "kill the
+agent" (do that from Login Items). The state persists in `storage.local`.
+
 ## Phase 0 acceptance (do this before Phase 1)
 
 The scrapers can be validated without Safari loading the extension at all:

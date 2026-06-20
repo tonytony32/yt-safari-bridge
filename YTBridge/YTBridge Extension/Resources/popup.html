@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <style>
+    :root { font: 13px/1.4 -apple-system, system-ui, sans-serif; }
+    body {
+      margin: 0;
+      width: 248px;
+      padding: 14px 16px;
+      color: -apple-system-label, CanvasText;
+      background: Canvas;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title { font-weight: 600; }
+    .hint {
+      margin: 10px 0 0;
+      font-size: 11.5px;
+      opacity: 0.6;
+    }
+    /* iOS-style switch */
+    .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0; cursor: pointer;
+      background: rgba(120,120,128,0.32);
+      border-radius: 22px; transition: background .18s ease;
+    }
+    .slider::before {
+      content: ""; position: absolute; height: 18px; width: 18px; left: 2px; top: 2px;
+      background: #fff; border-radius: 50%; transition: transform .18s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    }
+    input:checked + .slider { background: #34c759; }
+    input:checked + .slider::before { transform: translateX(16px); }
+  </style>
+</head>
+<body>
+  <div class="row">
+    <span class="title">Puente a JellyBeat</span>
+    <label class="switch">
+      <input type="checkbox" id="toggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  <p class="hint" id="hint"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -19,6 +19,8 @@
 		0A3760532FD2A6F4004C3D14 /* content in Resources */ = {isa = PBXBuildFile; fileRef = 0A37604F2FD2A6F4004C3D14 /* content */; };
 		0A3760542FD2A6F4004C3D14 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 0A3760502FD2A6F4004C3D14 /* manifest.json */; };
 		0A3760552FD2A6F4004C3D14 /* common.js in Resources */ = {isa = PBXBuildFile; fileRef = 0A3760512FD2A6F4004C3D14 /* common.js */; };
+		0AAA00050000000000000002 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 0AAA00050000000000000001 /* popup.html */; };
+		0AAA00060000000000000002 /* popup.js in Resources */ = {isa = PBXBuildFile; fileRef = 0AAA00060000000000000001 /* popup.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +63,8 @@
 		0A37604F2FD2A6F4004C3D14 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path =content; sourceTree = "<group>"; };
 		0A3760502FD2A6F4004C3D14 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path =manifest.json; sourceTree = "<group>"; };
 		0A3760512FD2A6F4004C3D14 /* common.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = common.js; path =common.js; sourceTree = "<group>"; };
+		0AAA00050000000000000001 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path =popup.html; sourceTree = "<group>"; };
+		0AAA00060000000000000001 /* popup.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = popup.js; path =popup.js; sourceTree = "<group>"; };
 		0AC0F16C0000000000000001 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -132,6 +136,8 @@
 				0A37604F2FD2A6F4004C3D14 /* content */,
 				0A3760502FD2A6F4004C3D14 /* manifest.json */,
 				0A3760512FD2A6F4004C3D14 /* common.js */,
+				0AAA00050000000000000001 /* popup.html */,
+				0AAA00060000000000000001 /* popup.js */,
 			);
 			name = Resources;
 			path = "YTBridge Extension/Resources";
@@ -235,6 +241,8 @@
 				0A3760552FD2A6F4004C3D14 /* common.js in Resources */,
 				0A3760542FD2A6F4004C3D14 /* manifest.json in Resources */,
 				0A3760522FD2A6F4004C3D14 /* background.js in Resources */,
+				0AAA00050000000000000002 /* popup.html in Resources */,
+				0AAA00060000000000000002 /* popup.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
