@@ -139,6 +139,10 @@ against that normalized model + MPRIS mapping, not against YouTube-specific shap
 
 ## Consumer guidance
 
+- The server is hosted by the **YTBridge container app** (a launch-at-login headless agent),
+  not by the Safari extension process. It's bound for the whole login session, so it stays
+  reachable across Safari quit/relaunch. **Connection refused now means the app isn't running**
+  (rather than "Safari closed") — still treat it the same as `{"active": false}`.
 - Treat **connection refused as "bridge idle"**, not an error.
 - Escape all string fields on render.
 - Put a `YTBridgeSource` behind a `PlaybackSource` protocol so a later transport swap (e.g. the

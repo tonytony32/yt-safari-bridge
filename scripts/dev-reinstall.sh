@@ -58,10 +58,19 @@ pluginkit -mAv 2>/dev/null | grep "com.trypwood.ytbridge.Extension" || true
 
 cat <<'EOF'
 
-✅ Installed. Now reload it in Safari so it picks up the new code:
+✅ Installed and launched. The YTBridge app is a headless background agent (no Dock icon, no
+   menu bar) that now OWNS the bridge socket (it no longer lives in the extension). On first
+   launch it registers to launch at login — approve it under
+   System Settings ▸ General ▸ Login Items & Extensions if prompted.
+
+   Reload the extension in Safari so it picks up the new appex code:
    Safari ▸ Settings ▸ Extensions ▸ toggle "YT Bridge" OFF then ON.
    (A full Safari ⌘Q + reopen also works.)
 
-Then confirm the bridge is live:
-   lsof -nP -iTCP:8976        # should show YTBridge ... (LISTEN)
+Then confirm the bridge is live (served by the APP now):
+   lsof -nP -iTCP:8976                       # should show "YTBridge" (the app), (LISTEN)
+   curl -s 127.0.0.1:8976/v1/health | jq     # { "ok": true, ... }
+
+The whole point of this redesign: the socket stays up across Safari quit/relaunch as long as
+the app is running — no more "toggle the extension off/on after every cold Safari launch".
 EOF
