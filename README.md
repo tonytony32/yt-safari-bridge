@@ -15,13 +15,14 @@ in [`PLAN.md`](PLAN.md).
 Content scripts push state on change + heartbeat → background relay →
 `SafariWebExtensionHandler` (Swift) **forwards** the state over a loopback channel to the
 **container app**, which owns the HTTP server on `127.0.0.1:8976`, holds the latest state + a
-bounded command queue, and runs for the whole login session (launch-at-login) → JellyBeat
-polls `GET /v1/now-playing` and `POST /v1/command`.
+bounded command queue → JellyBeat polls `GET /v1/now-playing` and `POST /v1/command`.
 
-The **container app** — not the on-demand extension process — hosts the socket, so the bridge
-stays up across Safari quit/relaunch instead of dying with the reaped `.appex`. (Earlier
-builds bound the socket inside the extension and needed an extension off/on toggle after every
-cold Safari launch; that's what this design fixes.) The port `8976` is a **hardcoded
+The **container app** hosts the socket (not the on-demand extension process, which the system
+reaps), so the bridge survives Safari quit/relaunch. **JellyBeat owns the host's lifecycle**:
+it launches the app when JellyBeat opens and quits it when JellyBeat closes, so the bridge runs
+exactly while JellyBeat runs — no login item, no resident process. (Earlier builds bound the
+socket inside the extension and needed an extension off/on toggle after every cold Safari
+launch; that's what this design fixes.) The port `8976` is a **hardcoded
 constant**; changing it means rebuilding.
 
 ## Status
@@ -38,14 +39,14 @@ constant**; changing it means rebuilding.
 - **Phase 4 — done.** Container-app status UI (server up/idle + current track), multi-tab
   arbitration hardening, docs handoff.
 - **Phase 5 — done.** Moved the HTTP server out of the on-demand `.appex` into the container
-  app (a launch-at-login **headless background agent** — no Dock icon, no menu-bar item), with
-  the extension forwarding state to it over a loopback ingest. Root-fixes the "must toggle the
-  extension after each cold Safari launch" bug: the socket is bound for the whole login
-  session, independent of Safari's event-page/extension-process lifecycle. The old webview
-  status window is gone; status lives in the consumer (JellyBeat polls `GET /v1/health`), so
-  there's one control surface instead of two. This is the closest Safari gets to Chrome's
-  invisible native-messaging host (Safari reaps the extension's native side, so a separate
-  persistent process is unavoidable).
+  app (a **headless host** — no Dock icon, no window, no menu bar), with the extension
+  forwarding state to it over a loopback ingest. Root-fixes the "must toggle the extension
+  after each cold Safari launch" bug: the socket lives in a process the system doesn't reap.
+- **Phase 6 — done.** Anchored the host's lifecycle to **JellyBeat**: JellyBeat launches the
+  host when it opens and quits it when it closes, so the bridge runs exactly while JellyBeat
+  runs — **no login item, no resident process**. The on/off control lives in JellyBeat's
+  settings (the consumer owns the source), not in the extension. The host watches JellyBeat and
+  self-quits if it goes away.
 
 The HTTP API is live and stable on `127.0.0.1:8976`; JellyBeat can integrate against
 [`docs/api.md`](docs/api.md) now.
@@ -62,7 +63,7 @@ yt-safari-bridge/
     ├── YTBridge.xcodeproj
     ├── YTBridge/                       ← container app (headless agent, owns the socket)
     │   ├── main.swift                  ← programmatic entry point (no storyboard); .accessory agent
-    │   ├── AppDelegate.swift           ← binds the server on launch, self-heal timer, login item
+    │   ├── AppDelegate.swift           ← binds the socket; quits when JellyBeat quits
     │   ├── HTTPServer.swift            ← HTTP/1.1 server (loopback, security model + ingest)
     │   └── StateStore.swift            ← latest state + 3s staleness + bounded queue
     └── YTBridge Extension/
@@ -89,18 +90,17 @@ xcodebuild -project YTBridge/YTBridge.xcodeproj -scheme YTBridge -configuration 
 ```
 
 A free personal Apple ID team is enough (the extension persists across Safari sessions; no
-"Allow Unsigned Extensions" needed). Then run the **YTBridge** app: it's a **headless
-background agent** (no Dock icon, no window, no menu-bar item) that binds the bridge socket
-immediately and, on first launch, registers itself to **launch at login** (approve it under
-System Settings → General → Login Items the first time). Enable the extension in Safari and
-grant site access (below). There's no app UI by design — check status with
-`GET /v1/health` (JellyBeat surfaces it); the bridge is up whenever the agent is running,
-regardless of Safari. Manage/stop it from System Settings → Login Items.
+"Allow Unsigned Extensions" needed). Install the **YTBridge** app once (it registers the Safari
+extension), enable the extension in Safari, and grant site access (below). The app is a
+**headless host** (no Dock icon, no window, no menu bar) with **no UI by design** — you don't
+launch it yourself: **JellyBeat launches it when it opens and quits it when it closes**, so the
+bridge runs exactly while JellyBeat runs (no login item, no resident process). The on/off
+control lives in **JellyBeat's settings** ("YouTube (Safari) source"), since the consumer owns
+the source. Check liveness with `GET /v1/health`.
 
-The extension's toolbar popup has a **Puente a JellyBeat** on/off switch (default on): turning
-it off stops forwarding your playback (JellyBeat goes idle within 3 s) without uninstalling
-anything. The socket stays bound — "off" means "don't expose my playback", not "kill the
-agent" (do that from Login Items). The state persists in `storage.local`.
+For local development you can launch the host standalone (no JellyBeat) with
+`open /Applications/YTBridge.app --args --standalone` — `scripts/dev-reinstall.sh` does this so
+you can verify the socket without running JellyBeat.
 
 ## Phase 0 acceptance (do this before Phase 1)
 
@@ -131,9 +131,10 @@ The scrapers can be validated without Safari loading the extension at all:
   the **container app** is up and serving; a large `safariLastPollMs` just means Safari isn't
   currently syncing (Safari closed / extension disabled / no YT tab open), and `/v1/now-playing`
   returns `{"active":false}`.
-- **Connection refused now means the container app isn't running** (quit, or never launched) —
-  not that Safari is closed. Launch **YTBridge** (a headless agent; it relaunches at login once
-  approved). Consumers should still treat connection-refused the same as `{"active":false}`.
+- **Connection refused now means the host isn't running** — i.e. JellyBeat is closed (it
+  launches the host) or the YouTube source is toggled off in JellyBeat. Not "Safari is closed".
+  Open JellyBeat to bring the bridge up. Consumers still treat connection-refused the same as
+  `{"active":false}`.
 - `lsof -nP -iTCP:8976` should show **`YTBridge`** (the app) holding the `LISTEN` socket — not
   `YTBridge Extension`. If it shows the extension, you're on an old build.
 

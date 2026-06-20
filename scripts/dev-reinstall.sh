@@ -47,7 +47,9 @@ rm -rf "$DERIVED"
 
 echo "▸ Registering & launching the installed copy…"
 "$LSREG" -f "$APP_DST"
-open "$APP_DST"
+# In normal use JellyBeat launches the host (and quits it on exit). Here we launch it with
+# --standalone so it stays up for local verification without JellyBeat running.
+open "$APP_DST" --args --standalone
 sleep 2
 
 echo "▸ Verifying…"
@@ -58,19 +60,19 @@ pluginkit -mAv 2>/dev/null | grep "com.trypwood.ytbridge.Extension" || true
 
 cat <<'EOF'
 
-✅ Installed and launched. The YTBridge app is a headless background agent (no Dock icon, no
-   menu bar) that now OWNS the bridge socket (it no longer lives in the extension). On first
-   launch it registers to launch at login — approve it under
-   System Settings ▸ General ▸ Login Items & Extensions if prompted.
+✅ Installed. The YTBridge app is a headless host (no Dock icon, no window, no menu bar) that
+   owns the bridge socket. It is NOT a login item — in normal use JellyBeat launches it when
+   JellyBeat opens and quits it when JellyBeat closes, so the bridge runs exactly while
+   JellyBeat runs. (This script launched it with --standalone so you can verify now.)
 
    Reload the extension in Safari so it picks up the new appex code:
    Safari ▸ Settings ▸ Extensions ▸ toggle "YT Bridge" OFF then ON.
    (A full Safari ⌘Q + reopen also works.)
 
-Then confirm the bridge is live (served by the APP now):
+Verify the standalone instance is live:
    lsof -nP -iTCP:8976                       # should show "YTBridge" (the app), (LISTEN)
    curl -s 127.0.0.1:8976/v1/health | jq     # { "ok": true, ... }
 
-The whole point of this redesign: the socket stays up across Safari quit/relaunch as long as
-the app is running — no more "toggle the extension off/on after every cold Safari launch".
+In real use you won't run this by hand: open JellyBeat and the bridge comes up with it; close
+JellyBeat and it goes away. No login item, no "toggle the extension after a cold Safari launch".
 EOF

@@ -1,67 +1,79 @@
 //
 //  AppDelegate.swift
-//  YTBridge  (container app — headless background agent)
+//  YTBridge  (container app — bridge host, lifecycle owned by JellyBeat)
 //
-//  The container app is now the owner of the loopback bridge. It runs for the whole login
-//  session (registered as a launch-at-login item) and binds the HTTP server on
-//  127.0.0.1:8976 the moment it starts — so JellyBeat can connect immediately after a cold
-//  Safari launch, with no YouTube tab open and without toggling the extension. The extension
-//  only feeds playback state in over the loopback ingest (see BridgeClient / HTTPServer); it
-//  no longer hosts any socket.
+//  This app hosts the loopback bridge socket (127.0.0.1:8976). It is NOT a login item and
+//  does NOT run on its own: JellyBeat — the only consumer — launches it when JellyBeat opens
+//  and terminates it when JellyBeat quits. So the bridge exists exactly while JellyBeat is
+//  running: not before, not after. That's the UX anchor — the consumer owns the lifecycle.
 //
-//  Deliberately HEADLESS: no Dock icon, no window, no menu-bar item (LSUIElement +
-//  .accessory in main.swift). Its only job is to keep the socket up; status and control live
-//  in the consumer (JellyBeat reads GET /v1/health), so there's a single control surface
-//  instead of a second macOS UI competing with it. It's the closest Safari gets to Chrome's
-//  invisible native-messaging host. Manage it from System Settings ▸ Login Items.
+//  To stay honest about that, the host watches JellyBeat and quits itself if JellyBeat is gone
+//  (covers a JellyBeat crash, or a stray manual launch). Pass `--standalone` to keep it up
+//  without JellyBeat — used only by scripts/dev-reinstall.sh for local verification.
+//
+//  Headless (.accessory in main.swift + LSUIElement): no Dock icon, no window, no menu bar.
 //
 
 import Cocoa
-import ServiceManagement
 import os
+
+/// JellyBeat's bundle identifier — the app whose lifecycle this host is tied to.
+let jellybeatBundleID = "software.trypwood.jellybeat"
 
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let log = Logger(subsystem: "com.trypwood.ytbridge", category: "app")
 
-    /// Set once, on first ever launch, so we register the login item a single time and then
-    /// respect whatever the user/System Settings choose afterward (no fighting).
-    private static let didAttemptInitialLoginRegistrationKey = "didAttemptInitialLoginRegistration"
+    /// Dev escape hatch: keep the host alive without JellyBeat (scripts/dev-reinstall.sh).
+    private let standalone = ProcessInfo.processInfo.arguments.contains("--standalone")
 
     private var healthTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Bind the bridge socket for the whole login session, independent of Safari.
+        // Bind the bridge socket immediately — JellyBeat launched us because it wants it now.
         HTTPServer.shared.ensureRunning()
 
-        registerLoginItemOnFirstRun()
-
-        // Self-heal: re-assert the listener on a slow cadence in case the system tore it down
-        // (sleep/wake, network changes). ensureRunning() is idempotent while already bound.
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-            HTTPServer.shared.ensureRunning()
+        if !standalone {
+            // Quit the instant JellyBeat quits.
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(appTerminated(_:)),
+                name: NSWorkspace.didTerminateApplicationNotification,
+                object: nil
+            )
         }
 
-        Self.log.notice("bridge agent launched; serving on 127.0.0.1:\(HTTPServer.port, privacy: .public)")
+        // Self-heal the listener, and (belt-and-suspenders) quit if JellyBeat has vanished
+        // without us catching the termination notification.
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            HTTPServer.shared.ensureRunning()
+            self?.quitIfJellyBeatGone()
+        }
+
+        Self.log.notice("bridge host launched (standalone=\(self.standalone, privacy: .public)); serving on 127.0.0.1:\(HTTPServer.port, privacy: .public)")
     }
 
-    // No windows, no UI: stay alive as a background agent.
+    // No windows, no UI: stay alive as a background process for as long as JellyBeat wants us.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
-    // MARK: - Login item (launch at login)
+    // MARK: - Lifecycle tied to JellyBeat
 
-    private func registerLoginItemOnFirstRun() {
-        guard #available(macOS 13.0, *) else { return }
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: Self.didAttemptInitialLoginRegistrationKey) else { return }
-        defaults.set(true, forKey: Self.didAttemptInitialLoginRegistrationKey)
-        do {
-            try SMAppService.mainApp.register()
-            Self.log.notice("registered login item")
-        } catch {
-            Self.log.error("login item initial register failed: \(String(describing: error), privacy: .public)")
+    @objc private func appTerminated(_ note: Notification) {
+        guard !standalone else { return }
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        if app?.bundleIdentifier == jellybeatBundleID {
+            Self.log.notice("JellyBeat terminated — bridge host quitting")
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func quitIfJellyBeatGone() {
+        guard !standalone else { return }
+        if NSRunningApplication.runningApplications(withBundleIdentifier: jellybeatBundleID).isEmpty {
+            Self.log.notice("JellyBeat not running — bridge host quitting")
+            NSApp.terminate(nil)
         }
     }
 }

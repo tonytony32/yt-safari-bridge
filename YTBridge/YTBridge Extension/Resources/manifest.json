@@ -3,11 +3,7 @@
   "name": "YT Bridge",
   "version": "0.1.0",
   "description": "Exposes YouTube / YouTube Music playback state to a local process (JellyBeat) via native messaging.",
-  "permissions": ["nativeMessaging", "scripting", "alarms", "storage"],
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "YT Bridge"
-  },
+  "permissions": ["nativeMessaging", "scripting", "alarms"],
   "host_permissions": [
     "*://www.youtube.com/*",
     "*://music.youtube.com/*"
