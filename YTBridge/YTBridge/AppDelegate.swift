@@ -15,6 +15,7 @@
 //
 
 import Cocoa
+import ServiceManagement
 import os
 
 /// JellyBeat's bundle identifier — the app whose lifecycle this host is tied to.
@@ -32,6 +33,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Bind the bridge socket immediately — JellyBeat launched us because it wants it now.
         HTTPServer.shared.ensureRunning()
+
+        removeStaleLoginItem()
 
         if !standalone {
             // Quit the instant JellyBeat quits.
@@ -74,6 +77,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if NSRunningApplication.runningApplications(withBundleIdentifier: jellybeatBundleID).isEmpty {
             Self.log.notice("JellyBeat not running — bridge host quitting")
             NSApp.terminate(nil)
+        }
+    }
+
+    /// One-time cleanup: earlier builds registered this app as a login item. We don't anymore
+    /// (JellyBeat owns our lifecycle), so drop any stale registration — otherwise we'd linger
+    /// in System Settings → Login Items and briefly launch at every boot (then self-quit).
+    private func removeStaleLoginItem() {
+        guard #available(macOS 13.0, *) else { return }
+        let status = SMAppService.mainApp.status
+        if status == .enabled || status == .requiresApproval {
+            try? SMAppService.mainApp.unregister()
+            Self.log.notice("removed stale login-item registration")
         }
     }
 }
