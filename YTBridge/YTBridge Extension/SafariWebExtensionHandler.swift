@@ -2,9 +2,15 @@
 //  SafariWebExtensionHandler.swift
 //  YTBridge Extension
 //
-//  Receives `{type:"sync", state}` from the background relay, stores it in the
-//  StateStore, drains any queued commands back in the reply, and (once per process)
-//  starts the NWListener bind spike that keeps the local HTTP server alive.
+//  Receives `{type:"sync", state}` from the background relay and FORWARDS it to the
+//  container app, which owns the loopback HTTP server now. The app stores the state and
+//  returns any queued commands, which we hand straight back to the background page in
+//  the same round trip (unchanged contract from the JS side).
+//
+//  The extension no longer binds a socket: that moved to the always-on container app so
+//  the bridge survives Safari quit/relaunch (see HTTPServer / BridgeClient). If the app
+//  isn't running yet, the forward fails fast and we simply return no commands — the next
+//  sync retries, exactly as before when the native host was momentarily down.
 //
 //  Privacy: logs event type, payload size and timing only — never state content.
 //
@@ -17,10 +23,6 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     private static let log = Logger(subsystem: "com.trypwood.ytbridge", category: "handler")
 
     func beginRequest(with context: NSExtensionContext) {
-        // Ensure the local HTTP server is up on every sync — it self-heals if
-        // the system tore the listener down while the extension was suspended.
-        HTTPServer.shared.ensureRunning()
-
         let request = context.inputItems.first as? NSExtensionItem
         let message: Any?
         if #available(macOS 11.0, *) {
@@ -34,8 +36,8 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         if let dict = message as? [String: Any],
            dict["type"] as? String == "sync" {
             let state = (dict["state"] as? [String: Any]) ?? ["active": false]
-            StateStore.shared.update(state: state)
-            commands = StateStore.shared.drainCommands()
+            // Forward to the container app's loopback ingest; it returns queued commands.
+            commands = BridgeClient.forward(state: state)
 
             let active = (state["active"] as? Bool) ?? false
             Self.log.log("sync: active=\(active, privacy: .public) stateKeys=\(state.count, privacy: .public) cmdsOut=\(commands.count, privacy: .public)")

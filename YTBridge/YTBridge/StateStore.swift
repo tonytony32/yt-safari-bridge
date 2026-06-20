@@ -1,10 +1,19 @@
 //
 //  StateStore.swift
-//  YTBridge Extension
+//  YTBridge  (container app)
 //
-//  Thread-safe singleton holding the latest playback state pushed from Safari, the
-//  time of the last sync (for the 3s staleness rule), and a bounded FIFO command
-//  queue that the HTTP server (Phase 2) fills and each native sync drains.
+//  Thread-safe singleton holding the latest playback state, the time of the last
+//  sync (for the 3s staleness rule), and a bounded FIFO command queue that the
+//  HTTP server fills and each Safari sync drains.
+//
+//  Lives in the CONTAINER APP now (not the extension): the app owns the loopback
+//  server for the whole login session, so the socket is up across Safari quit/relaunch
+//  instead of dying with the on-demand .appex. The extension's beginRequest forwards
+//  state into here over a loopback channel (see HTTPServer `/_internal/sync` and the
+//  extension's BridgeClient); `update(state:)` is driven by that ingest.
+//
+//  `nonisolated` so it stays off the app target's default MainActor isolation — its
+//  methods run on the HTTPServer's connection queues, guarded by its own lock.
 //
 //  Privacy: this type never logs the state's string content. Track titles in the
 //  unified log are readable by any same-user process.
@@ -12,7 +21,9 @@
 
 import Foundation
 
-final class StateStore {
+// `@unchecked Sendable`: the shared singleton is reached from the HTTP server's
+// connection queues; all state is serialized through `lock`.
+nonisolated final class StateStore: @unchecked Sendable {
 
     static let shared = StateStore()
 

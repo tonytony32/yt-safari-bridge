@@ -8,12 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		0A3760252FD2A6F3004C3D14 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A3760242FD2A6F3004C3D14 /* AppDelegate.swift */; };
-		0A3760292FD2A6F3004C3D14 /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = 0A3760272FD2A6F3004C3D14 /* Main.html */; };
-		0A37602B2FD2A6F3004C3D14 /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 0A37602A2FD2A6F3004C3D14 /* Icon.png */; };
-		0A37602D2FD2A6F3004C3D14 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 0A37602C2FD2A6F3004C3D14 /* Style.css */; };
-		0A37602F2FD2A6F3004C3D14 /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = 0A37602E2FD2A6F3004C3D14 /* Script.js */; };
-		0A3760312FD2A6F3004C3D14 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A3760302FD2A6F3004C3D14 /* ViewController.swift */; };
-		0A3760342FD2A6F3004C3D14 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 0A3760322FD2A6F3004C3D14 /* Main.storyboard */; };
+		0AAA00040000000000000002 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AAA00040000000000000001 /* main.swift */; };
+		0AAA00030000000000000002 /* BridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AAA00030000000000000001 /* BridgeClient.swift */; };
 		0A3760362FD2A6F4004C3D14 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A3760352FD2A6F4004C3D14 /* Assets.xcassets */; };
 		0A37603D2FD2A6F4004C3D14 /* YTBridge Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0A37603C2FD2A6F4004C3D14 /* YTBridge Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0A3760422FD2A6F4004C3D14 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A3760412FD2A6F4004C3D14 /* SafariWebExtensionHandler.swift */; };
@@ -52,18 +48,14 @@
 /* Begin PBXFileReference section */
 		0A3760212FD2A6F3004C3D14 /* YTBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YTBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A3760242FD2A6F3004C3D14 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		0A3760282FD2A6F3004C3D14 /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
-		0A37602A2FD2A6F3004C3D14 /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
-		0A37602C2FD2A6F3004C3D14 /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
-		0A37602E2FD2A6F3004C3D14 /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
-		0A3760302FD2A6F3004C3D14 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
-		0A3760332FD2A6F3004C3D14 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		0AAA00040000000000000001 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		0A3760352FD2A6F4004C3D14 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0A3760372FD2A6F4004C3D14 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A37603C2FD2A6F4004C3D14 /* YTBridge Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "YTBridge Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A3760412FD2A6F4004C3D14 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
 		0AAA00010000000000000001 /* StateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateStore.swift; sourceTree = "<group>"; };
 		0AAA00020000000000000001 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
+		0AAA00030000000000000001 /* BridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeClient.swift; sourceTree = "<group>"; };
 		0A3760432FD2A6F4004C3D14 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		0A37604E2FD2A6F4004C3D14 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path =background.js; sourceTree = "<group>"; };
 		0A37604F2FD2A6F4004C3D14 /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path =content; sourceTree = "<group>"; };
@@ -112,25 +104,14 @@
 		0A3760232FD2A6F3004C3D14 /* YTBridge */ = {
 			isa = PBXGroup;
 			children = (
+				0AAA00040000000000000001 /* main.swift */,
 				0A3760242FD2A6F3004C3D14 /* AppDelegate.swift */,
-				0A3760302FD2A6F3004C3D14 /* ViewController.swift */,
-				0A3760322FD2A6F3004C3D14 /* Main.storyboard */,
+				0AAA00010000000000000001 /* StateStore.swift */,
+				0AAA00020000000000000001 /* HTTPServer.swift */,
 				0A3760352FD2A6F4004C3D14 /* Assets.xcassets */,
 				0A3760372FD2A6F4004C3D14 /* Info.plist */,
-				0A3760262FD2A6F3004C3D14 /* Resources */,
 			);
 			path = YTBridge;
-			sourceTree = "<group>";
-		};
-		0A3760262FD2A6F3004C3D14 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				0A3760272FD2A6F3004C3D14 /* Main.html */,
-				0A37602A2FD2A6F3004C3D14 /* Icon.png */,
-				0A37602C2FD2A6F3004C3D14 /* Style.css */,
-				0A37602E2FD2A6F3004C3D14 /* Script.js */,
-			);
-			path = Resources;
 			sourceTree = "<group>";
 		};
 		0A3760402FD2A6F4004C3D14 /* YTBridge Extension */ = {
@@ -138,8 +119,7 @@
 			children = (
 				0A37604D2FD2A6F4004C3D14 /* Resources */,
 				0A3760412FD2A6F4004C3D14 /* SafariWebExtensionHandler.swift */,
-				0AAA00010000000000000001 /* StateStore.swift */,
-				0AAA00020000000000000001 /* HTTPServer.swift */,
+				0AAA00030000000000000001 /* BridgeClient.swift */,
 				0A3760432FD2A6F4004C3D14 /* Info.plist */,
 			);
 			path = "YTBridge Extension";
@@ -243,12 +223,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A37602B2FD2A6F3004C3D14 /* Icon.png in Resources */,
-				0A3760342FD2A6F3004C3D14 /* Main.storyboard in Resources */,
-				0A37602F2FD2A6F3004C3D14 /* Script.js in Resources */,
-				0A3760292FD2A6F3004C3D14 /* Main.html in Resources */,
 				0A3760362FD2A6F4004C3D14 /* Assets.xcassets in Resources */,
-				0A37602D2FD2A6F3004C3D14 /* Style.css in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,8 +245,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0A3760312FD2A6F3004C3D14 /* ViewController.swift in Sources */,
+				0AAA00040000000000000002 /* main.swift in Sources */,
 				0A3760252FD2A6F3004C3D14 /* AppDelegate.swift in Sources */,
+				0AAA00010000000000000002 /* StateStore.swift in Sources */,
+				0AAA00020000000000000002 /* HTTPServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -280,8 +257,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0A3760422FD2A6F4004C3D14 /* SafariWebExtensionHandler.swift in Sources */,
-				0AAA00010000000000000002 /* StateStore.swift in Sources */,
-				0AAA00020000000000000002 /* HTTPServer.swift in Sources */,
+				0AAA00030000000000000002 /* BridgeClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,24 +271,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin PBXVariantGroup section */
-		0A3760272FD2A6F3004C3D14 /* Main.html */ = {
-			isa = PBXVariantGroup;
-			children = (
-				0A3760282FD2A6F3004C3D14 /* Base */,
-			);
-			name = Main.html;
-			sourceTree = "<group>";
-		};
-		0A3760322FD2A6F3004C3D14 /* Main.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				0A3760332FD2A6F3004C3D14 /* Base */,
-			);
-			name = Main.storyboard;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		0A3760442FD2A6F4004C3D14 /* Debug */ = {
@@ -459,7 +417,7 @@
 					"-framework",
 					SafariServices,
 				);
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.trypwood.ytbridge.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -495,7 +453,7 @@
 					"-framework",
 					SafariServices,
 				);
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.trypwood.ytbridge.Extension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -518,13 +476,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YTBridge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YTBridge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -561,13 +519,13 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = YTBridge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = YTBridge;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMainStoryboardFile = Main;
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

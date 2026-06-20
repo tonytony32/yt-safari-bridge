@@ -1,9 +1,21 @@
 //
 //  HTTPServer.swift
-//  YTBridge Extension
+//  YTBridge  (container app)
 //
-//  Minimal hand-rolled HTTP/1.1 server on Network.framework, hosted inside the
-//  extension process. Replaces the Phase 1 BindSpike. No SPM dependencies.
+//  Minimal hand-rolled HTTP/1.1 server on Network.framework. No SPM dependencies.
+//
+//  Now hosted inside the CONTAINER APP (not the extension). The app runs for the whole
+//  login session (launch-at-login), so the listener stays bound across Safari quit and
+//  relaunch — the root fix for "JellyBeat sees connection-refused until I toggle the
+//  extension". Previously this lived in the on-demand .appex, which macOS reaps shortly
+//  after each native sync, so the socket only existed in brief windows.
+//
+//  The extension no longer binds anything: on every Safari sync its beginRequest
+//  forwards the latest state to this server's `/_internal/sync` ingest route and gets
+//  queued commands back (see the extension's BridgeClient).
+//
+//  `nonisolated` so it runs off the app target's default MainActor isolation (its work
+//  is on the connection queues below, guarded by its own locks).
 //
 //  Security model (PLAN.md / docs/api.md) — implemented exactly:
 //    - bind strictly to loopback 127.0.0.1 (never 0.0.0.0)
@@ -14,6 +26,7 @@
 //      Connection: close after every response; X-Content-Type-Options: nosniff
 //
 //  Endpoints: GET /v1/now-playing, GET /v1/health, POST /v1/command.
+//  Internal-only: POST /_internal/sync (token-gated, extension → app ingest).
 //  Logs lifecycle/events only — never metadata content.
 //
 
@@ -21,12 +34,23 @@ import Foundation
 import Network
 import os
 
-final class HTTPServer {
+// `@unchecked Sendable`: shared across the connection queues below; all mutable state is
+// guarded by `lock` / `countLock`, so the captures of `self` in the @Sendable Network
+// callbacks are safe by manual synchronization.
+nonisolated final class HTTPServer: @unchecked Sendable {
 
     static let shared = HTTPServer()
 
     static let port: UInt16 = 8976
     static let version = "0.1.0"
+
+    /// Internal ingest channel (extension → app). The .appex POSTs the latest state
+    /// here on every Safari sync and gets the queued commands back in the response.
+    /// Gated by a baked shared token so a random local process can't spoof now-playing.
+    /// Same loopback threat model as the public API (docs/api.md): not real auth, just a
+    /// bar above "any local process". MUST match BridgeClient.token in the extension.
+    static let internalToken = "ytb-internal-7f3a9c2e1b8d4056-v1"
+    private static let internalSyncPath = "/_internal/sync"
 
     private static let maxRequestBytes = 8 * 1024
     private static let maxConnections = 8
@@ -36,7 +60,19 @@ final class HTTPServer {
     private let log = Logger(subsystem: "com.trypwood.ytbridge", category: "http")
     private let lock = NSLock()
     private var started = false
+    private var ready = false   // listener has reached .ready (socket actually bound)
     private var listener: NWListener?
+
+    /// Whether the loopback socket is currently bound and serving. Cheap and lock-guarded;
+    /// kept as an internal status probe (consumers see liveness via the HTTP response itself).
+    var isReady: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ready
+    }
+
+    private func setReady(_ value: Bool) {
+        lock.lock(); ready = value; lock.unlock()
+    }
     private let connQueue = DispatchQueue(label: "com.trypwood.ytbridge.http", attributes: .concurrent)
     private let countLock = NSLock()
     private var liveConnections = 0
@@ -78,6 +114,7 @@ final class HTTPServer {
             l.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
+                    self?.setReady(true)
                     self?.log.notice("listener ready on 127.0.0.1:\(Self.port, privacy: .public)")
                 case .failed(let e):
                     self?.log.error("listener failed: \(String(describing: e), privacy: .public)")
@@ -108,6 +145,7 @@ final class HTTPServer {
         lock.lock()
         let wasStarted = started
         started = false
+        ready = false
         let old = listener
         listener = nil
         lock.unlock()
@@ -247,9 +285,32 @@ final class HTTPServer {
         case ("POST", "/v1/command"):
             handleCommand(conn, body: body)
 
+        case ("POST", Self.internalSyncPath):
+            handleInternalSync(conn, request: request, body: body)
+
         default:
             respond(conn, status: 404, reason: "Not Found", json: ["error": "not_found"])
         }
+    }
+
+    /// Ingest from the extension's BridgeClient: store the latest playback state and
+    /// return any queued commands in the same round trip (the extension relays those
+    /// back to the page). Token-gated; the Host/Origin checks in route() already ran.
+    private func handleInternalSync(_ conn: NWConnection, request: HTTPRequest, body: Data) {
+        guard request.headerValue("x-ytbridge-token") == Self.internalToken else {
+            respond(conn, status: 403, reason: "Forbidden", json: ["error": "bad_token"])
+            return
+        }
+        let state: [String: Any]
+        if let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+           let s = obj["state"] as? [String: Any] {
+            state = s
+        } else {
+            state = ["active": false]
+        }
+        StateStore.shared.update(state: state)
+        let commands = StateStore.shared.drainCommands()
+        respond(conn, status: 200, reason: "OK", json: ["commands": commands])
     }
 
     private static let validActions: Set<String> = [
@@ -338,7 +399,7 @@ final class HTTPServer {
 
 // MARK: - Tiny request parser
 
-private struct HTTPRequest {
+private nonisolated struct HTTPRequest {
     let method: String
     let path: String
     private let headers: [String: String] // lowercased keys

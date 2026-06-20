@@ -139,6 +139,11 @@ against that normalized model + MPRIS mapping, not against YouTube-specific shap
 
 ## Consumer guidance
 
+- The server is hosted by the **YTBridge container app** (a headless host), not by the Safari
+  extension process — so it survives Safari quit/relaunch. The host's lifecycle is owned by
+  **JellyBeat**: JellyBeat launches it on open and quits it on close, so the bridge is up
+  exactly while JellyBeat runs (no login item). **Connection refused now means JellyBeat isn't
+  running** (or the source is toggled off) — still treat it the same as `{"active": false}`.
 - Treat **connection refused as "bridge idle"**, not an error.
 - Escape all string fields on render.
 - Put a `YTBridgeSource` behind a `PlaybackSource` protocol so a later transport swap (e.g. the
