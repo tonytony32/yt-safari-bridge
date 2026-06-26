@@ -56,6 +56,8 @@ if command -v node >/dev/null 2>&1; then
     node --check "$DIST/$j"
   done
   node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$DIST/manifest.json"
+else
+  echo "⚠ node not found — skipped the JS/JSON syntax check (install Node to enable it)" >&2
 fi
 
 echo "✅ Built $DIST"

@@ -16,5 +16,6 @@ build/
 YTBridge.xcodeproj/project.xcworkspace/xcuserdata/
 YTBridge.xcodeproj/xcuserdata/
 
-# Firefox build output (assembled by scripts/build-firefox.sh from the Safari Resources)
+# Browser build outputs (assembled by scripts/build-{firefox,chrome}.sh from the Safari Resources)
 firefox/dist/
+chrome/dist/

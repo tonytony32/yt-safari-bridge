@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "YT Bridge",
+  "version": "0.1.0",
+  "description": "Exposes YouTube / YouTube Music playback state to a local process (JellyBeat) via a loopback bridge.",
+  "minimum_chrome_version": "111",
+  "permissions": ["scripting", "alarms"],
+  "host_permissions": [
+    "*://www.youtube.com/*",
+    "*://music.youtube.com/*",
+    "http://127.0.0.1:8976/*"
+  ],
+  "background": {
+    "service_worker": "sw-bootstrap.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["chrome-shim.js", "common.js", "content/youtube.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://music.youtube.com/*"],
+      "js": ["chrome-shim.js", "common.js", "content/ytmusic.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
