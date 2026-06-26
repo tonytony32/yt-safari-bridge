@@ -24,7 +24,9 @@ adapters on top, because it diverges from Safari/Firefox MV3 in two ways:
   host's `/_internal/sync` ingest directly instead of relaying through a Safari containing app.
 
 The host accepts the Chrome feeder because its internal ingest admits extension-scheme origins
-(`chrome-extension://…`); the public `/v1/*` API still rejects any `Origin`. No manifest `key`
+(`chrome-extension://…`) **and answers the CORS preflight** the browser sends before the POST
+(reflecting that exact origin, plus `Access-Control-Allow-Private-Network` for Chrome's PNA);
+the public `/v1/*` API still emits no CORS header and rejects any `Origin`. No manifest `key`
 or hard-coded extension id is needed — the host prefix-matches the scheme, so any install id
 works.
 
@@ -54,14 +56,18 @@ for Safari/Firefox.
 
 ## Status
 
-Experimental. The Chrome-specific behaviors below were verified from Chrome's developer docs but
-should be smoke-tested on a live Chrome build:
+Experimental — **not yet smoke-tested on a live Chrome build** (the sibling Firefox build is
+confirmed working on Zen). Heads-up from that Firefox testing: a browser-extension background
+`fetch()` to the loopback ingest **does** send a CORS preflight (`OPTIONS`) — the
+"`host_permissions` bypasses CORS" assumption was false. The host now answers that preflight
+(reflecting the `chrome-extension://` origin + `Access-Control-Allow-Private-Network: true`), so
+Chrome should work the same way. If it silently fails, check the service-worker console for
+`CORS`/`OPTIONS`/`Private Network Access` errors against `/_internal/sync` first.
+
+Worth confirming on a live Chrome build:
 
 - the service-worker `importScripts` bootstrap loading shim → config → `background.js` in one
   shared global, and the SW staying alive across the sub-second loopback fetch;
-- `registerContentScripts({ world: "MAIN" })` actually injecting the teardown helper;
-- **Private/Local Network Access**: extension service-worker fetches to `127.0.0.1` are expected
-  to be exempt from PNA gating, but the Local Network Access prompt ships in **Chrome 142+** —
-  smoke-test the loopback POST there specifically. (We deliberately do **not** emit any CORS /
-  PNA response header — the host's "no CORS headers, ever" stance holds — so if a future Chrome
-  ever gates this, the fix is host-side, not a silent weakening here.)
+- `registerContentScripts({ world: "MAIN" })` injecting the teardown helper;
+- **Private/Local Network Access** on **Chrome 142+** (the LNA prompt ships there); the host
+  already sends `Access-Control-Allow-Private-Network: true` on the ingest.

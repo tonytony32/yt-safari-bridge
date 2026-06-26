@@ -23,7 +23,9 @@ Only two things are Firefox-specific:
   `background.js`.
 
 The host accepts the Firefox feeder because its internal ingest admits extension-scheme
-origins (`moz-extension://…`); the public `/v1/*` API still rejects any `Origin`.
+origins (`moz-extension://…`) **and answers the CORS preflight** Firefox sends before the POST
+(reflecting that exact origin); the public `/v1/*` API still emits no CORS header and rejects
+any `Origin`.
 
 ## Build & load
 
@@ -51,11 +53,17 @@ the host is down, same as for Safari.
 
 ## Status
 
-Experimental. The Firefox-specific behaviors below were verified from Mozilla docs but
-should be smoke-tested on a live Firefox 128+ build:
+**Confirmed working** end-to-end on **Zen Browser** (a Firefox/Gecko fork): the extension feeds
+the host and `GET /v1/now-playing` returns live state.
 
-- the exact `Origin` string Firefox attaches to the loopback POST (expected
-  `moz-extension://<uuid>`; the host prefix-matches the scheme);
-- `registerContentScripts({ world: "MAIN" })` actually injecting the teardown helper;
-- the `alarms` keepalive firing near its 30 s period without an excessive event-page reload
-  cost.
+One thing the offline research got wrong and only live testing caught: a Firefox extension's
+background `fetch()` to the loopback ingest **does** send a CORS preflight (`OPTIONS`) — the
+"`host_permissions` bypasses CORS" assumption did not hold. The host now answers that preflight
+for extension-scheme/`null` origins (reflecting the exact origin, never `*`, never on `/v1/*`),
+which is what made it work. If you port to another Gecko browser and it silently fails, check
+the browser console for `CORS`/`OPTIONS` errors against `/_internal/sync` first.
+
+Still nice to confirm on your build (not blockers — they degrade gracefully):
+
+- `registerContentScripts({ world: "MAIN" })` injecting the Now-Playing teardown helper;
+- the `alarms` keepalive cadence near 30 s.
