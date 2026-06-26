@@ -21,12 +21,17 @@
 //    - bind strictly to loopback 127.0.0.1 (never 0.0.0.0)
 //    - NO CORS headers, ever
 //    - 403 if Host header != "127.0.0.1:8976"   (defeats DNS rebinding)
-//    - 403 if any Origin header is present       (closes the drive-by browser vector)
+//    - 403 if an Origin header is present on the PUBLIC api (/v1/*) — native consumers
+//      never send one, so any Origin there is a drive-by browser (closes that vector).
+//      The internal ingest is the one exception: it is fed by a browser extension, so it
+//      admits extension-scheme origins only (see route()).
 //    - 413 if request > 8 KB; 5 s read timeout; max 8 concurrent connections;
 //      Connection: close after every response; X-Content-Type-Options: nosniff
 //
 //  Endpoints: GET /v1/now-playing, GET /v1/health, POST /v1/command.
-//  Internal-only: POST /_internal/sync (token-gated, extension → app ingest).
+//  Internal-only: POST /_internal/sync (token-gated, browser extension → host ingest).
+//  Browser-neutral: Safari relays it through its containing app (no Origin), while a
+//  Chrome/Firefox extension POSTs it directly (Origin: <ext-scheme>://<id>).
 //  Logs lifecycle/events only — never metadata content.
 //
 
@@ -56,6 +61,22 @@ nonisolated final class HTTPServer: @unchecked Sendable {
     private static let maxConnections = 8
     private static let readTimeout: TimeInterval = 5.0
     private static let expectedHost = "127.0.0.1:8976"
+
+    /// Extension-origin schemes allowed to reach the internal ingest (and ONLY it). A web
+    /// page's Origin is always http(s):// — never one of these — and the scheme is set by
+    /// the browser, not page script, so this admits a Safari/Chrome/Firefox extension
+    /// background while keeping drive-by pages out. Firefox sends a randomized
+    /// `moz-extension://<uuid>`, so this is a scheme PREFIX test, never an exact match.
+    /// (If a future Firefox ever reverts to `Origin: null` for extension fetches — bug
+    /// 1405971 — the Firefox feeder would 403 here and this would need a `null` allowance.)
+    private static let extensionOriginSchemes = [
+        "safari-web-extension://",
+        "chrome-extension://",
+        "moz-extension://",
+    ]
+    private static func isExtensionOrigin(_ origin: String) -> Bool {
+        extensionOriginSchemes.contains { origin.hasPrefix($0) }
+    }
 
     private let log = Logger(subsystem: "com.trypwood.ytbridge", category: "http")
     private let lock = NSLock()
@@ -260,14 +281,30 @@ nonisolated final class HTTPServer: @unchecked Sendable {
     // MARK: - Routing
 
     private func route(_ conn: NWConnection, request: HTTPRequest, body: Data) {
-        // DNS-rebinding defense + drive-by browser defense.
+        // DNS-rebinding defense (every path): the Host must be our exact loopback
+        // authority, never an attacker-controlled name that resolves to 127.0.0.1.
         guard request.headerValue("host") == Self.expectedHost else {
             respond(conn, status: 403, reason: "Forbidden", json: ["error": "bad_host"])
             return
         }
-        if request.headerValue("origin") != nil {
-            respond(conn, status: 403, reason: "Forbidden", json: ["error": "origin_rejected"])
-            return
+
+        let isInternalSync = request.method == "POST" && request.path == Self.internalSyncPath
+
+        // Origin policy (drive-by browser defense):
+        //   - Public API (/v1/*): native consumers (JellyBeat) only, and they never send
+        //     an Origin — so reject ANY Origin outright.
+        //   - Internal ingest (/_internal/sync): fed by a browser-extension background, so
+        //     it legitimately carries Origin: <ext-scheme>://<id> (Chrome/Firefox; Safari's
+        //     native relay sends none). Admit only extension-scheme origins; a web page's
+        //     Origin is always http(s):// and the scheme is browser-set and unspoofable
+        //     from page script, so a drive-by page can't reach the ingest even if it learned
+        //     the baked token (which is the real gate — see handleInternalSync).
+        if let origin = request.headerValue("origin") {
+            let allowed = isInternalSync && Self.isExtensionOrigin(origin)
+            if !allowed {
+                respond(conn, status: 403, reason: "Forbidden", json: ["error": "origin_rejected"])
+                return
+            }
         }
 
         switch (request.method, request.path) {

@@ -59,6 +59,12 @@ yt-safari-bridge/
 ├── docs/
 │   ├── api.md            ← HTTP contract for JellyBeat
 │   └── console-test.js   ← paste into Safari Web Inspector to validate the scrapers
+├── scripts/
+│   ├── dev-reinstall.sh  ← clean rebuild + reinstall the Safari host into /Applications
+│   └── build-firefox.sh  ← assemble firefox/dist/ from the shared Resources
+├── firefox/              ← Firefox build (reuses the Resources' JS; see firefox/README.md)
+│   ├── README.md
+│   └── src/{manifest.json, firefox-config.js}
 └── YTBridge/
     ├── YTBridge.xcodeproj
     ├── YTBridge/                       ← container app (headless agent, owns the socket)
@@ -77,7 +83,9 @@ yt-safari-bridge/
 ```
 
 The top-level `extension/` folder was migrated into `YTBridge Extension/Resources/` (Phase 1)
-and deleted; that copy is now the single source of truth.
+and deleted; that copy is now the single source of truth — the **Firefox build reuses those
+same JS files** (see [Firefox](#firefox-experimental) below), so a scraper or relay fix made
+in the Resources reaches both browsers.
 
 ## Build
 
@@ -101,6 +109,23 @@ the source. Check liveness with `GET /v1/health`.
 For local development you can launch the host standalone (no JellyBeat) with
 `open /Applications/YTBridge.app --args --standalone` — `scripts/dev-reinstall.sh` does this so
 you can verify the socket without running JellyBeat.
+
+## Firefox (experimental)
+
+The bridge host is browser-neutral: its loopback ingest now accepts a browser-extension
+feeder, not just Safari's native relay. So Firefox can drive the **same** host (the YTBridge
+app) and JellyBeat consumes it through the unchanged [`docs/api.md`](docs/api.md) contract.
+
+```sh
+scripts/build-firefox.sh   # assembles firefox/dist/ from the shared Resources + Firefox files
+```
+
+Then load `firefox/dist/manifest.json` via `about:debugging` → **Load Temporary Add-on**
+(Firefox 128+, no signing needed). The content scripts and background relay are shared
+byte-for-byte with Safari (single source of truth in `YTBridge Extension/Resources/`); only
+the **transport** differs — Firefox `fetch()`es the host's `/_internal/sync` directly
+instead of relaying through a Safari containing app it doesn't have. Details and the
+verify-live checklist are in [`firefox/README.md`](firefox/README.md).
 
 ## Phase 0 acceptance (do this before Phase 1)
 

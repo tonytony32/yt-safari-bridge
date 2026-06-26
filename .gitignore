@@ -15,3 +15,6 @@ build/
 # Xcode user state
 YTBridge.xcodeproj/project.xcworkspace/xcuserdata/
 YTBridge.xcodeproj/xcuserdata/
+
+# Firefox build output (assembled by scripts/build-firefox.sh from the Safari Resources)
+firefox/dist/
