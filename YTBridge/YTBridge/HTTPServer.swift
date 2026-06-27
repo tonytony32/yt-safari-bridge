@@ -19,14 +19,24 @@
 //
 //  Security model (PLAN.md / docs/api.md) — implemented exactly:
 //    - bind strictly to loopback 127.0.0.1 (never 0.0.0.0)
-//    - NO CORS headers, ever
+//    - NO CORS headers on the PUBLIC /v1/* API, ever — emitting Access-Control-Allow-Origin
+//      there would let any webpage you visit read your listening state.
 //    - 403 if Host header != "127.0.0.1:8976"   (defeats DNS rebinding)
-//    - 403 if any Origin header is present       (closes the drive-by browser vector)
+//    - 403 if an Origin header is present on the PUBLIC api (/v1/*) — native consumers
+//      never send one, so any Origin there is a drive-by browser (closes that vector).
+//      The internal ingest is the one exception: it is fed by a browser extension, so it
+//      admits extension-scheme / "null" origins only (see route()), AND answers the CORS
+//      preflight, echoing Access-Control-Allow-Origin for that exact origin (never "*", never
+//      a web origin) so the extension can POST and read the reply (respondPreflight / respond's
+//      allowOrigin). A drive-by web page's http(s) Origin is still refused.
 //    - 413 if request > 8 KB; 5 s read timeout; max 8 concurrent connections;
 //      Connection: close after every response; X-Content-Type-Options: nosniff
 //
 //  Endpoints: GET /v1/now-playing, GET /v1/health, POST /v1/command.
-//  Internal-only: POST /_internal/sync (token-gated, extension → app ingest).
+//  Internal-only: OPTIONS+POST /_internal/sync (token-gated, browser extension → host ingest).
+//  Browser-neutral: Safari relays it through its containing app (no Origin, no preflight),
+//  while a Chrome/Firefox extension POSTs it directly — and DOES send a CORS preflight first
+//  (the "extension host_permissions bypass CORS" assumption proved false live), which we answer.
 //  Logs lifecycle/events only — never metadata content.
 //
 
@@ -56,6 +66,22 @@ nonisolated final class HTTPServer: @unchecked Sendable {
     private static let maxConnections = 8
     private static let readTimeout: TimeInterval = 5.0
     private static let expectedHost = "127.0.0.1:8976"
+
+    /// Extension-origin schemes allowed to reach the internal ingest (and ONLY it). A web
+    /// page's Origin is always http(s):// — never one of these — and the scheme is set by
+    /// the browser, not page script, so this admits a Safari/Chrome/Firefox extension
+    /// background while keeping drive-by pages out. Firefox sends a randomized
+    /// `moz-extension://<uuid>`, so this is a scheme PREFIX test, never an exact match.
+    /// (If a future Firefox ever reverts to `Origin: null` for extension fetches — bug
+    /// 1405971 — the Firefox feeder would 403 here and this would need a `null` allowance.)
+    private static let extensionOriginSchemes = [
+        "safari-web-extension://",
+        "chrome-extension://",
+        "moz-extension://",
+    ]
+    private static func isExtensionOrigin(_ origin: String) -> Bool {
+        extensionOriginSchemes.contains { origin.hasPrefix($0) }
+    }
 
     private let log = Logger(subsystem: "com.trypwood.ytbridge", category: "http")
     private let lock = NSLock()
@@ -260,12 +286,59 @@ nonisolated final class HTTPServer: @unchecked Sendable {
     // MARK: - Routing
 
     private func route(_ conn: NWConnection, request: HTTPRequest, body: Data) {
-        // DNS-rebinding defense + drive-by browser defense.
+        // DNS-rebinding defense (every path): the Host must be our exact loopback
+        // authority, never an attacker-controlled name that resolves to 127.0.0.1.
         guard request.headerValue("host") == Self.expectedHost else {
             respond(conn, status: 403, reason: "Forbidden", json: ["error": "bad_host"])
             return
         }
-        if request.headerValue("origin") != nil {
+
+        let isInternalSync = request.method == "POST" && request.path == Self.internalSyncPath
+        let origin = request.headerValue("origin")
+
+        // CORS preflight for the internal ingest. Firefox/Chrome DO fire an OPTIONS preflight
+        // before the POST (it is a non-simple request: JSON body + the X-YTBridge-Token header)
+        // — the "extension host_permissions bypass CORS" assumption does not hold here in
+        // practice. Answer the preflight for extension-scheme / "null" origins so the real POST
+        // is allowed through; reflect the exact origin (never "*") and keep the public /v1/* API
+        // free of any CORS header.
+        if request.method == "OPTIONS" && request.path == Self.internalSyncPath {
+            if let origin = origin, origin == "null" || Self.isExtensionOrigin(origin) {
+                log.info("internal ingest preflight: origin=\(origin, privacy: .public) allowed")
+                respondPreflight(conn, origin: origin)
+            } else {
+                log.notice("internal ingest preflight REJECTED: origin=\(origin ?? "<none>", privacy: .public)")
+                respond(conn, status: 403, reason: "Forbidden", json: ["error": "origin_rejected"])
+            }
+            return
+        }
+
+        // Origin policy (drive-by browser defense):
+        //   - Public API (/v1/*): native consumers (JellyBeat) only, and they never send an
+        //     Origin — so reject ANY Origin outright.
+        //   - Internal ingest (/_internal/sync): fed by a browser-extension background, which
+        //     carries Origin: <ext-scheme>://<id> (Chrome/Firefox; Safari's native relay sends
+        //     none; some Firefox-family browsers send the literal "null"). Admit extension-scheme
+        //     origins, "null", or no Origin; reject web (http/https) origins. The scheme is
+        //     browser-set and unspoofable from page script, and the baked token
+        //     (handleInternalSync) is the real gate — so a drive-by page can't reach the ingest
+        //     regardless. Log the origin + outcome (an Origin string is not metadata) so a
+        //     rejected feeder is diagnosable instead of failing silently.
+        if isInternalSync {
+            let ok: Bool
+            if let origin = origin {
+                ok = origin == "null" || Self.isExtensionOrigin(origin)
+            } else {
+                ok = true
+            }
+            if ok {
+                log.info("internal ingest: origin=\(origin ?? "<none>", privacy: .public) accepted")
+            } else {
+                log.notice("internal ingest REJECTED: origin=\(origin ?? "", privacy: .public) (not an extension/null origin)")
+                respond(conn, status: 403, reason: "Forbidden", json: ["error": "origin_rejected"])
+                return
+            }
+        } else if origin != nil {
             respond(conn, status: 403, reason: "Forbidden", json: ["error": "origin_rejected"])
             return
         }
@@ -297,8 +370,15 @@ nonisolated final class HTTPServer: @unchecked Sendable {
     /// return any queued commands in the same round trip (the extension relays those
     /// back to the page). Token-gated; the Host/Origin checks in route() already ran.
     private func handleInternalSync(_ conn: NWConnection, request: HTTPRequest, body: Data) {
+        // Reflect the validated extension-scheme/"null" origin on the response so the browser
+        // lets the extension READ the queued commands back (the request already cleared the
+        // Origin gate in route()). nil for a no-Origin caller (Safari's native relay), which
+        // needs no CORS header.
+        let cors = request.headerValue("origin").flatMap {
+            ($0 == "null" || Self.isExtensionOrigin($0)) ? $0 : nil
+        }
         guard request.headerValue("x-ytbridge-token") == Self.internalToken else {
-            respond(conn, status: 403, reason: "Forbidden", json: ["error": "bad_token"])
+            respond(conn, status: 403, reason: "Forbidden", json: ["error": "bad_token"], allowOrigin: cors)
             return
         }
         let state: [String: Any]
@@ -310,7 +390,7 @@ nonisolated final class HTTPServer: @unchecked Sendable {
         }
         StateStore.shared.update(state: state)
         let commands = StateStore.shared.drainCommands()
-        respond(conn, status: 200, reason: "OK", json: ["commands": commands])
+        respond(conn, status: 200, reason: "OK", json: ["commands": commands], allowOrigin: cors)
     }
 
     private static let validActions: Set<String> = [
@@ -372,7 +452,7 @@ nonisolated final class HTTPServer: @unchecked Sendable {
 
     // MARK: - Response
 
-    private func respond(_ conn: NWConnection, status: Int, reason: String, json: [String: Any]) {
+    private func respond(_ conn: NWConnection, status: Int, reason: String, json: [String: Any], allowOrigin: String? = nil) {
         let bodyData: Data
         if let d = try? JSONSerialization.data(withJSONObject: json, options: []) {
             bodyData = d
@@ -385,13 +465,41 @@ nonisolated final class HTTPServer: @unchecked Sendable {
         head += "Content-Length: \(bodyData.count)\r\n"
         head += "X-Content-Type-Options: nosniff\r\n"
         head += "Connection: close\r\n"
-        // NO CORS headers, by design.
+        // CORS headers ONLY for the internal ingest, reflecting an already-validated
+        // extension-scheme/"null" origin — never "*", never on the public /v1/* API (which
+        // passes allowOrigin == nil). The browser requires the ACTUAL response (not just the
+        // preflight) to echo Access-Control-Allow-Origin for the extension to read the reply.
+        if let allowOrigin = allowOrigin {
+            head += "Access-Control-Allow-Origin: \(allowOrigin)\r\n"
+            head += "Access-Control-Allow-Private-Network: true\r\n"
+            head += "Vary: Origin\r\n"
+        }
         head += "\r\n"
 
         var out = Data(head.utf8)
         out.append(bodyData)
 
         conn.send(content: out, completion: .contentProcessed { [weak self] _ in
+            self?.finish(conn)
+        })
+    }
+
+    /// Answer the CORS preflight (OPTIONS) the browser sends before the extension's POST to the
+    /// internal ingest. Reflects the caller's exact extension-scheme/"null" origin and allows
+    /// the token header + POST; scoped to /_internal/sync, so the public API never emits a CORS
+    /// header. Includes Allow-Private-Network for Chrome's PNA preflight (harmless elsewhere).
+    private func respondPreflight(_ conn: NWConnection, origin: String) {
+        var head = "HTTP/1.1 204 No Content\r\n"
+        head += "Access-Control-Allow-Origin: \(origin)\r\n"
+        head += "Access-Control-Allow-Methods: POST, OPTIONS\r\n"
+        head += "Access-Control-Allow-Headers: content-type, x-ytbridge-token\r\n"
+        head += "Access-Control-Allow-Private-Network: true\r\n"
+        head += "Access-Control-Max-Age: 600\r\n"
+        head += "Vary: Origin\r\n"
+        head += "Content-Length: 0\r\n"
+        head += "Connection: close\r\n"
+        head += "\r\n"
+        conn.send(content: Data(head.utf8), completion: .contentProcessed { [weak self] _ in
             self?.finish(conn)
         })
     }
