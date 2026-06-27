@@ -45,6 +45,37 @@ dropped when Firefox restarts — re-load it each session. The **YTBridge host m
 running** (JellyBeat launches it) for the bridge to answer; connection-refused just means
 the host is down, same as for Safari.
 
+## Packaging for distribution (and for a permanent local install)
+
+The temporary add-on above is dev-only. Firefox/Zen only install an add-on **permanently** if
+it is **signed by Mozilla** (free, but only Mozilla can do it). Start by building the package:
+
+```sh
+scripts/package-firefox.sh           # → firefox/artifacts/yt_bridge-<version>.zip  (unsigned)
+```
+
+Then sign it, either route:
+
+- **Web upload (no API keys):** take that `.zip` to
+  [addons.mozilla.org](https://addons.mozilla.org) → **Developer Hub → Submit a New Add-on →
+  "On your own"** (self-distribution / unlisted). Mozilla signs it and hands back a `.xpi` you
+  can distribute. Users open the `.xpi` in Firefox/Zen to install it permanently.
+- **CLI (automated):** with API credentials from **Developer Hub → Manage API Keys** in the
+  environment, the script signs directly:
+
+  ```sh
+  AMO_JWT_ISSUER='user:…' AMO_JWT_SECRET='…' scripts/package-firefox.sh --sign
+  ```
+
+Notes:
+- The `gecko.id` (`ytbridge@trypwood.com`) is already set — signing requires it.
+- **Bump `version`** in [`src/manifest.json`](src/manifest.json) before each release; Mozilla
+  rejects a version it has already signed.
+- This extension is inert without the **YTBridge host + JellyBeat** on a Mac, so a distributed
+  `.xpi` only helps someone who already runs that stack. A signed `.xpi` is still worth it for
+  your **own** machine — it installs permanently, so you stop re-loading the temporary add-on
+  every time Zen restarts.
+
 ## Requirements
 
 - Firefox **128+** (`scripting.executeScript`/`registerContentScripts` with `world: "MAIN"`

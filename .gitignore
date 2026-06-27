@@ -19,3 +19,6 @@ YTBridge.xcodeproj/xcuserdata/
 # Browser build outputs (assembled by scripts/build-{firefox,chrome}.sh from the Safari Resources)
 firefox/dist/
 chrome/dist/
+
+# Firefox packaged add-on (scripts/package-firefox.sh → web-ext build/sign)
+firefox/artifacts/
