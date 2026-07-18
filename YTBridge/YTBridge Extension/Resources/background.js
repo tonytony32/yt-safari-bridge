@@ -167,12 +167,35 @@ function activeState() {
   return { active: false };
 }
 
+// One sync round trip to the bridge host: push state up, get queued commands back. The
+// transport differs per browser, and is the ONLY browser-specific line in this file:
+//   - Safari has a native containing app, so it relays through it (sendNativeMessage →
+//     SafariWebExtensionHandler → loopback POST to the host). URLSession sends no Origin.
+//   - Chrome/Firefox have no containing app, so they POST the host's loopback ingest
+//     directly. Their build defines globalThis.__YTB_INGEST (+ __YTB_TOKEN) via a config
+//     shim loaded before this file (see manifest background.scripts order); Safari leaves
+//     them undefined and falls through to native messaging — identical behavior to before.
+// Either path resolves to { commands: [...] } (or {} on failure); callers read .commands.
+async function forwardSync(payload) {
+  const ingest = globalThis.__YTB_INGEST;
+  if (ingest) {
+    const res = await fetch(ingest, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-YTBridge-Token": globalThis.__YTB_TOKEN || "",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return {};
+    return await res.json();
+  }
+  return browser.runtime.sendNativeMessage("application.id", payload);
+}
+
 async function syncNative() {
   try {
-    const reply = await browser.runtime.sendNativeMessage("application.id", {
-      type: "sync",
-      state: activeState(),
-    });
+    const reply = await forwardSync({ type: "sync", state: activeState() });
     const commands = (reply && reply.commands) || [];
     // Await each dispatch so the event page stays alive until the MAIN-world volume
     // inject (executeScript) actually completes — see persistVolume.

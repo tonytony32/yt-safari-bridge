@@ -59,6 +59,16 @@ yt-safari-bridge/
 ├── docs/
 │   ├── api.md            ← HTTP contract for JellyBeat
 │   └── console-test.js   ← paste into Safari Web Inspector to validate the scrapers
+├── scripts/
+│   ├── dev-reinstall.sh  ← clean rebuild + reinstall the Safari host into /Applications
+│   ├── build-firefox.sh  ← assemble firefox/dist/ from the shared Resources
+│   └── build-chrome.sh   ← assemble chrome/dist/ from the shared Resources
+├── firefox/              ← Firefox build (reuses the Resources' JS; see firefox/README.md)
+│   ├── README.md
+│   └── src/{manifest.json, firefox-config.js}
+├── chrome/               ← Chrome build (reuses the Resources' JS; see chrome/README.md)
+│   ├── README.md
+│   └── src/{manifest.json, chrome-shim.js, chrome-config.js, sw-bootstrap.js}
 └── YTBridge/
     ├── YTBridge.xcodeproj
     ├── YTBridge/                       ← container app (headless agent, owns the socket)
@@ -77,7 +87,9 @@ yt-safari-bridge/
 ```
 
 The top-level `extension/` folder was migrated into `YTBridge Extension/Resources/` (Phase 1)
-and deleted; that copy is now the single source of truth.
+and deleted; that copy is now the single source of truth — the **Firefox and Chrome builds
+reuse those same JS files** (see [Firefox & Chrome](#firefox--chrome-experimental) below), so a
+scraper or relay fix made in the Resources reaches all three browsers.
 
 ## Build
 
@@ -101,6 +113,26 @@ the source. Check liveness with `GET /v1/health`.
 For local development you can launch the host standalone (no JellyBeat) with
 `open /Applications/YTBridge.app --args --standalone` — `scripts/dev-reinstall.sh` does this so
 you can verify the socket without running JellyBeat.
+
+## Firefox & Chrome (experimental)
+
+The bridge host is browser-neutral: its loopback ingest now accepts a browser-extension
+feeder, not just Safari's native relay. So Firefox and Chrome can drive the **same** host (the
+YTBridge app), and JellyBeat consumes it through the unchanged [`docs/api.md`](docs/api.md)
+contract whichever browser is playing.
+
+```sh
+scripts/build-firefox.sh   # → firefox/dist/  (about:debugging → Load Temporary Add-on, FF 128+)
+scripts/build-chrome.sh    # → chrome/dist/   (chrome://extensions → Load unpacked, Chrome 111+)
+```
+
+The content scripts and background relay are shared byte-for-byte with Safari (single source of
+truth in `YTBridge Extension/Resources/`); each build adds only a thin per-browser shell. The
+one thing that differs is **transport** — Firefox/Chrome `fetch()` the host's `/_internal/sync`
+directly instead of relaying through a Safari containing app they don't have. Chrome also needs
+a `browser`→`chrome` namespace shim and a service-worker bootstrap (Firefox, like Safari, uses
+`browser.*` and an event page natively). Details and the verify-live checklists are in
+[`firefox/README.md`](firefox/README.md) and [`chrome/README.md`](chrome/README.md).
 
 ## Phase 0 acceptance (do this before Phase 1)
 
