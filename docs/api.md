@@ -53,7 +53,8 @@ arbitrary config files, so runtime configuration is not promised.
   "volume": 0.8,
   "liked": false,
   "tabId": 42,
-  "updatedAtMs": 1765432100123
+  "updatedAtMs": 1765432100123,
+  "staleMs": 412
 }
 ```
 
@@ -71,12 +72,34 @@ Field notes:
   (not liked), or `null` (unknown: the like control wasn't found, e.g. selector
   drift or a page without one). Toggle it with the `like`/`unlike`/`toggleLike`
   commands below.
+- `staleMs`: milliseconds since the last sync from Safari. `0`–ish while a tab is
+  actively reporting; grows without bound while a paused tab is frozen (see below).
+  Present on every `active: true` response.
 
-`{"active": false}` is returned when nothing is playing/paused, **and also whenever the last
-sync from Safari is older than 3 s** (staleness rule — covers crashed tabs, closed Safari,
-disabled extension). JellyBeat extrapolates position between polls using `updatedAtMs`, and
-treats **connection refused the same as `active: false`**. All string fields are untrusted
-page content: escape on render.
+### Staleness rule (depends on the last known `state`)
+
+`{"active": false}` is returned when nothing is playing/paused, and also when the last sync
+from Safari is too old. **How old is "too old" depends on the last state synced:**
+
+- **`state: "playing"` → 3 s.** A tab that was making sound and went silent is a closed tab,
+  a crashed tab, or a disabled extension. It should disappear fast.
+- **`state: "paused"` → 30 min.** macOS freezes a backgrounded tab's timers, so a paused tab's
+  only remaining pulse is the extension's 30 s keepalive alarm re-sending the cached state.
+  Under a flat 3 s cut that produced a square wave — 3 s "paused, active", 27 s "idle" — and
+  consumers flickered. **A pause ends with a real stop, not with silence.** Past the 30 min TTL
+  the state goes `{"active": false}` like any other stale state.
+
+Consumers that want to distinguish "paused just now" from "paused and asleep for 20 minutes"
+should read `staleMs` rather than re-deriving it — e.g. render a dimmed/"sleeping" treatment
+above some threshold instead of dropping the overlay.
+
+Note the `503 safari_disconnected` cut on `POST /v1/command` is **unchanged at 3 s** for every
+state: serving a stale pause is useful, but queueing a command for a Safari that hasn't checked
+in is queueing into the void.
+
+JellyBeat extrapolates position between polls using `updatedAtMs`, and treats **connection
+refused the same as `active: false`**. All string fields are untrusted page content: escape on
+render.
 
 ## `POST /v1/command`
 
@@ -102,6 +125,8 @@ Errors:
 
 - `400` — unknown action / missing or non-numeric value.
 - `503 {"error": "safari_disconnected"}` — last sync older than 3 s (don't queue into the void).
+  This 3 s cut is flat: it applies even when `/v1/now-playing` is still serving a stale pause
+  as `active: true`.
 - `409 {"error": "no_active_player"}` — Safari is syncing but the active tab reports
   nothing playable, so the command would be dropped. Returned synchronously (not queued).
 
