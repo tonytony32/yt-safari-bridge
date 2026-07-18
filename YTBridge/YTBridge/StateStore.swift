@@ -27,9 +27,18 @@ nonisolated final class StateStore: @unchecked Sendable {
 
     static let shared = StateStore()
 
-    /// State older than this is treated as "idle" (`{active:false}`) — covers crashed
-    /// tabs, closed Safari, disabled extension.
+    /// A *playing* state older than this is treated as "idle" (`{active:false}`) — a tab
+    /// that was making sound and went silent is a close or a crash, and should vanish fast.
+    /// Also gates the `503 safari_disconnected` reply on `POST /v1/command`, regardless of
+    /// the last known state.
     static let stalenessInterval: TimeInterval = 3.0
+
+    /// A *paused* state survives this much silence before going idle. macOS freezes the
+    /// content script's timers once Safari is backgrounded, so the only pulse left is
+    /// background.js's 30 s keepalive alarm — under the flat 3 s rule that made the bridge
+    /// emit a square wave (3 s "paused", 27 s "idle") and consumers flicker. A pause should
+    /// end with a real stop, not with silence.
+    static let pausedStalenessInterval: TimeInterval = 30 * 60
 
     /// Bounded command queue depth; oldest is dropped on overflow.
     private static let maxCommands = 16
@@ -54,15 +63,19 @@ nonisolated final class StateStore: @unchecked Sendable {
 
     // MARK: - Reads for the HTTP server
 
-    /// The state to serve, applying the staleness rule. Includes `updatedAtMs`.
+    /// The state to serve, applying the staleness rule for the last known state (long TTL
+    /// while paused, 3 s while playing). Includes `updatedAtMs` and `staleMs`.
     func currentState() -> [String: Any] {
         lock.sync {
-            guard let last = lastSync,
-                  Date().timeIntervalSince(last) <= Self.stalenessInterval else {
-                return ["active": false]
-            }
+            guard let last = lastSync else { return ["active": false] }
+            let age = Date().timeIntervalSince(last)
+            let ttl = (state["state"] as? String) == "paused"
+                ? Self.pausedStalenessInterval
+                : Self.stalenessInterval
+            guard age <= ttl else { return ["active": false] }
             var s = state
             s["updatedAtMs"] = Int(last.timeIntervalSince1970 * 1000)
+            s["staleMs"] = Int(age * 1000)
             return s
         }
     }
@@ -75,7 +88,9 @@ nonisolated final class StateStore: @unchecked Sendable {
         }
     }
 
-    /// True when there has been no sync within the staleness window.
+    /// True when there has been no sync within the flat 3 s window. Deliberately *not*
+    /// state-aware: it gates `503 safari_disconnected` on `POST /v1/command`, and queueing
+    /// a command for a Safari that hasn't checked in for minutes is queueing into the void.
     func isStale() -> Bool {
         lock.sync {
             guard let last = lastSync else { return true }
